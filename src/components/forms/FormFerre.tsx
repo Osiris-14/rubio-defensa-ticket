@@ -12,7 +12,7 @@ const EMPTY = {
   piezas_custom: '',
 }
 
-export default function FormPintura({ user }: Props) {
+export default function FormFerre({ user }: Props) {
   const [form, setForm] = useState(EMPTY)
   const [piezas, setPiezas] = useState<string[]>([])
   const [ordenes, setOrdenes] = useState<string[]>([''])
@@ -27,14 +27,16 @@ export default function FormPintura({ user }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.numero_factura || !form.modelo || piezas.length === 0) { alert('Completa los campos requeridos.'); return }
+    if (!form.numero_factura || !form.modelo || piezas.length === 0) {
+      alert('Completa los campos requeridos y selecciona al menos una pieza.'); return
+    }
     if (form.re_trabajo === 'Si' && !form.grado_reparacion) {
       alert('Selecciona el grado de reparación.'); return
     }
     setLoading(true)
     try {
       const ordenesFiltradas = ordenes.map(o => o.trim()).filter(Boolean)
-      await saveTicket('pintura', {
+      await saveTicket('ferre', {
         ...form,
         piezas,
         ordenes: ordenesFiltradas,
@@ -52,14 +54,14 @@ export default function FormPintura({ user }: Props) {
 
   if (submitted) return (
     <div>
-      <FormHeader title="Ticket de Pintura" subtitle="Control de pintado de defensas" role={user.role} />
+      <FormHeader title="Ticket de Ferré (Preparación)" subtitle="Control de preparación de piezas" role={user.role} />
       <SuccessMessage onNew={() => { setSubmitted(false); setForm(EMPTY); setPiezas([]); setOrdenes(['']) }} />
     </div>
   )
 
   return (
     <div style={{ animation: 'fadeInUp 0.4s ease', width: '100%' }}>
-      <FormHeader title="Ticket de Pintura" subtitle="Control de pintado de defensas" role={user.role} />
+      <FormHeader title="Ticket de Ferré (Preparación)" subtitle="Control de preparación de piezas" role={user.role} />
       <form onSubmit={handleSubmit}>
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
           <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>INFORMACION DE ORDEN</h3>
@@ -83,7 +85,7 @@ export default function FormPintura({ user }: Props) {
                 fontFamily: 'Rajdhani', fontSize: '12px', fontWeight: 700, padding: '4px 0',
               }}>+ Agregar otra orden</button>
             </div>
-            <TextInput label="A Cargo De" value={form.a_cargo_de} onChange={set('a_cargo_de')} placeholder="Nombre del pintor" required />
+            <TextInput label="A Cargo De" value={form.a_cargo_de} onChange={set('a_cargo_de')} placeholder="Nombre del responsable" required />
             <TextInput label="Fecha de Entrega" value={form.fecha_entrega} onChange={set('fecha_entrega')} type="date" />
             <TextInput label="Modelo" value={form.modelo} onChange={set('modelo')} placeholder="Toyota Hilux" required />
             <TextInput label="Tipo de Modelo" value={form.tipo_modelo} onChange={set('tipo_modelo')} placeholder="2023, 4x4" />
@@ -101,11 +103,11 @@ export default function FormPintura({ user }: Props) {
         </div>
 
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
-          <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>PIEZAS A PINTAR</h3>
+          <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>PIEZAS A PREPARAR</h3>
           <CheckboxGroup label="Selecciona las piezas" options={PIEZAS_OPTIONS} selected={piezas} onChange={setPiezas} required />
           {piezas.length > 0 && (
             <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(232,24,10,0.05)', borderRadius: '6px', border: '1px solid rgba(232,24,10,0.2)' }}>
-              <span style={{ fontSize: '12px', color: '#E8180A', fontWeight: 700 }}>{piezas.length} pieza(s): </span>
+              <span style={{ fontSize: '12px', color: '#E8180A', fontWeight: 700 }}>{piezas.length} pieza(s) seleccionada(s): </span>
               <span style={{ fontSize: '12px', color: '#555555' }}>{piezas.join(', ')}</span>
             </div>
           )}
@@ -122,7 +124,7 @@ export default function FormPintura({ user }: Props) {
         </div>
 
         <button className="btn-red" type="submit" disabled={loading} style={{ width: '100%', fontSize: '16px' }}>
-          {loading ? 'Guardando...' : 'GUARDAR TICKET DE PINTURA'}
+          {loading ? 'Guardando...' : 'GUARDAR TICKET DE FERRÉ'}
         </button>
       </form>
     </div>

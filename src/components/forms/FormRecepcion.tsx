@@ -13,24 +13,19 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
     numero_factura: '',
     numero_orden: '',
     fecha: '',
-    hora_entrega: '',
     entregado_por: '',
     modelo: '',
     tipo_modelo: '',
-    nivel_gasolina: '',
     micas_rotas: '',
     cristales_rotos: '',
-    calidad_luces: '',
     pertenencias_personales: '',
     rayaduras: '',
   })
 
   // Holds uploaded public URLs per field (PhotoField uploads to Storage on select).
   const [photos, setPhotos] = useState<Record<string, string[]>>({
-    nivel_gasolina_fotos: [],
     micas_rotas_fotos: [],
     cristales_rotos_fotos: [],
-    luces_video: [],
     pertenencias_fotos: [],
     rayaduras_fotos: [],
   })
@@ -66,7 +61,7 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
   }
 
   function resetPhotos() {
-    setPhotos({ nivel_gasolina_fotos: [], micas_rotas_fotos: [], cristales_rotos_fotos: [], luces_video: [], pertenencias_fotos: [], rayaduras_fotos: [] })
+    setPhotos({ micas_rotas_fotos: [], cristales_rotos_fotos: [], pertenencias_fotos: [], rayaduras_fotos: [] })
     setPhotoStatus({})
   }
 
@@ -104,7 +99,7 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
     return (
       <div>
         <FormHeader title="Ticket de Recepcion" subtitle="Registro de recepcion de vehiculo" role={user.role} />
-        <SuccessMessage onNew={() => { setSubmitted(false); setForm({ numero_factura: '', numero_orden: '', fecha: '', hora_entrega: '', entregado_por: '', modelo: '', tipo_modelo: '', nivel_gasolina: '', micas_rotas: '', cristales_rotos: '', calidad_luces: '', pertenencias_personales: '', rayaduras: '' }); resetPhotos() }} />
+        <SuccessMessage onNew={() => { setSubmitted(false); setForm({ numero_factura: '', numero_orden: '', fecha: '', entregado_por: '', modelo: '', tipo_modelo: '', micas_rotas: '', cristales_rotos: '', pertenencias_personales: '', rayaduras: '' }); resetPhotos() }} />
       </div>
     )
   }
@@ -118,9 +113,11 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
           <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>INFORMACION BASICA</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <TextInput label="Numero de Factura" value={form.numero_factura} onChange={set('numero_factura')} placeholder="Ej: F-2025-001" required />
-            <TextInput label="Numero de Orden" value={form.numero_orden} onChange={set('numero_orden')} placeholder="Ej: ORD-001" required />
+            <div>
+              <TextInput label="Numero de Orden" value={form.numero_orden} onChange={set('numero_orden')} placeholder="Ej: ORD-001" required />
+              <p style={{ fontSize: '11px', color: '#999999', marginTop: '2px' }}>Al integrar con Alegra, los datos del vehículo se traerán automáticamente desde la orden</p>
+            </div>
             <TextInput label="Fecha" value={form.fecha} onChange={set('fecha')} type="date" />
-            <TextInput label="Hora de Entrega" value={form.hora_entrega} onChange={set('hora_entrega')} type="time" />
             <TextInput label="Entregado Por" value={form.entregado_por} onChange={set('entregado_por')} placeholder="Nombre del cliente" required />
           </div>
         </div>
@@ -136,20 +133,12 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
           <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>INSPECCION DEL VEHICULO</h3>
 
-          <RadioField label="Nivel de Gasolina" options={['Bajito', 'Medio', 'Alto']} value={form.nivel_gasolina} onChange={set('nivel_gasolina')} required />
-          <PhotoField label="Foto del nivel de gasolina" fieldName="nivel_gasolina_fotos" photos={photos.nivel_gasolina_fotos} onChange={f => setPhotos(p => ({ ...p, nivel_gasolina_fotos: f }))} onStatusChange={photoStatusFor('nivel_gasolina_fotos')} />
-
-          <div style={{ height: '20px' }} />
           <RadioField label="Micas Rotas" options={['Si', 'NO']} value={form.micas_rotas} onChange={setRadioWithPhoto('micas_rotas', 'micas_rotas_fotos', 'Si')} required />
           {form.micas_rotas === 'Si' && <PhotoField label="Fotos de micas rotas" fieldName="micas_rotas_fotos" photos={photos.micas_rotas_fotos} onChange={f => setPhotos(p => ({ ...p, micas_rotas_fotos: f }))} onStatusChange={photoStatusFor('micas_rotas_fotos')} />}
 
           <div style={{ height: '20px' }} />
           <RadioField label="Cristales Rotos" options={['Si', 'No']} value={form.cristales_rotos} onChange={setRadioWithPhoto('cristales_rotos', 'cristales_rotos_fotos', 'Si')} required />
           {form.cristales_rotos === 'Si' && <PhotoField label="Fotos de cristales rotos" fieldName="cristales_rotos_fotos" photos={photos.cristales_rotos_fotos} onChange={f => setPhotos(p => ({ ...p, cristales_rotos_fotos: f }))} onStatusChange={photoStatusFor('cristales_rotos_fotos')} />}
-
-          <div style={{ height: '20px' }} />
-          <RadioField label="Calidad de las Luces" options={['Buen estado', 'Mal estado']} value={form.calidad_luces} onChange={setRadioWithPhoto('calidad_luces', 'luces_video', 'Mal estado')} required />
-          {form.calidad_luces === 'Mal estado' && <PhotoField label="Video de las luces" fieldName="luces_video" photos={photos.luces_video} onChange={f => setPhotos(p => ({ ...p, luces_video: f }))} onStatusChange={photoStatusFor('luces_video')} />}
 
           <div style={{ height: '20px' }} />
           <RadioField label="Tiene pertenencias personales?" options={['Si', 'no']} value={form.pertenencias_personales} onChange={setRadioWithPhoto('pertenencias_personales', 'pertenencias_fotos', 'Si')} required />

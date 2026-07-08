@@ -3,7 +3,7 @@
 // `user_id` TEXT + `user_name`. RLS is disabled on the ticket tables.
 import { supabase } from './supabase'
 
-export type UserRole = 'recepcion' | 'produccion' | 'pintura' | 'instalacion' | 'marquilla' | 'admin'
+export type UserRole = 'recepcion' | 'produccion' | 'pintura' | 'instalacion' | 'marquilla' | 'ferre' | 'admin'
 
 export interface AppUser {
   id: string
@@ -20,6 +20,7 @@ export const DEMO_USERS: AppUser[] = [
   { id: '4', username: 'instalacion', name: 'Juan Torres', role: 'instalacion', password: '1234' },
   { id: '5', username: 'marquilla', name: 'Ana López', role: 'marquilla', password: '1234' },
   { id: '6', username: 'admin', name: 'Administrador', role: 'admin', password: 'admin123' },
+  { id: '7', username: 'ferre', name: 'Área Ferré', role: 'ferre', password: '1234' },
 ]
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -28,6 +29,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   pintura: 'Pintura',
   instalacion: 'Instalación',
   marquilla: 'Marquilla',
+  ferre: 'Ferré (Preparación)',
   admin: 'Administrador',
 }
 
@@ -38,6 +40,7 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   pintura: '#E8180A',
   instalacion: '#3B6D11',
   marquilla: '#534AB7',
+  ferre: '#e07b00',
   admin: '#E8180A',
 }
 
@@ -48,8 +51,8 @@ export const PIEZAS_OPTIONS = [
   'Maletero', 'Canasto'
 ]
 
-// The five area tables (admin is a view across all of them, not its own table).
-export const AREA_ROLES: UserRole[] = ['recepcion', 'produccion', 'pintura', 'instalacion', 'marquilla']
+// The area tables (admin is a view across all of them, not its own table).
+export const AREA_ROLES: UserRole[] = ['recepcion', 'produccion', 'pintura', 'instalacion', 'marquilla', 'ferre']
 
 // Postgres rejects '' for DATE/TIME columns, so blank fields become null.
 // The forms send a `fotos` object; the schema column is `fotos_urls`.

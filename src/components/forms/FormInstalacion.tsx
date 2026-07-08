@@ -5,22 +5,40 @@ import { RadioField, TextInput, CheckboxGroup, FormHeader, SuccessMessage } from
 
 interface Props { user: AppUser; onSuccess: () => void }
 
-const EMPTY = { numero_factura: '', numero_orden: '', a_cargo_de: '', fecha_entrega: '', modelo: '', tipo_modelo: '', re_trabajo: '', fecha_compromiso: '' }
+const EMPTY = {
+  numero_factura: '', numero_orden: '', a_cargo_de: '',
+  fecha_entrega: '', modelo: '', tipo_modelo: '',
+  re_trabajo: '', fecha_compromiso: '',
+  piezas_custom: '',
+}
 
 export default function FormInstalacion({ user }: Props) {
   const [form, setForm] = useState(EMPTY)
   const [piezas, setPiezas] = useState<string[]>([])
+  const [ordenes, setOrdenes] = useState<string[]>([''])
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
 
   function set(key: string) { return (v: string) => setForm(f => ({ ...f, [key]: v })) }
+
+  function addOrden() { setOrdenes(o => [...o, '']) }
+  function removeOrden(i: number) { setOrdenes(o => o.filter((_, idx) => idx !== i)) }
+  function setOrden(i: number, v: string) { setOrdenes(o => o.map((val, idx) => idx === i ? v : val)) }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.numero_factura || !form.modelo || piezas.length === 0) { alert('Completa los campos requeridos.'); return }
     setLoading(true)
     try {
-      await saveTicket('instalacion', { ...form, piezas, user_id: user.id, user_name: user.name })
+      const ordenesFiltradas = ordenes.map(o => o.trim()).filter(Boolean)
+      await saveTicket('instalacion', {
+        ...form,
+        piezas,
+        ordenes: ordenesFiltradas,
+        numero_orden: ordenesFiltradas[0] || '',
+        user_id: user.id,
+        user_name: user.name,
+      })
       setSubmitted(true)
     } catch (err) {
       alert('No se pudo guardar el ticket: ' + (err as Error).message)
@@ -32,7 +50,7 @@ export default function FormInstalacion({ user }: Props) {
   if (submitted) return (
     <div>
       <FormHeader title="Ticket de Instalacion" subtitle="Registro de instalacion de defensas" role={user.role} />
-      <SuccessMessage onNew={() => { setSubmitted(false); setForm(EMPTY); setPiezas([]) }} />
+      <SuccessMessage onNew={() => { setSubmitted(false); setForm(EMPTY); setPiezas([]); setOrdenes(['']) }} />
     </div>
   )
 
@@ -44,7 +62,24 @@ export default function FormInstalacion({ user }: Props) {
           <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>INFORMACION DE ORDEN</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <TextInput label="Numero de Factura" value={form.numero_factura} onChange={set('numero_factura')} placeholder="F-2025-001" required />
-            <TextInput label="Numero de Orden" value={form.numero_orden} onChange={set('numero_orden')} placeholder="ORD-001" required />
+            <div>
+              <TextInput label="Numero de Orden" value={ordenes[0] || ''} onChange={v => setOrden(0, v)} placeholder="ORD-001" required />
+              {ordenes.slice(1).map((o, i) => (
+                <div key={i + 1} style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', marginTop: '8px' }}>
+                  <div style={{ flex: 1 }}>
+                    <TextInput label={`Orden adicional ${i + 2}`} value={o} onChange={v => setOrden(i + 1, v)} placeholder="ORD-002" />
+                  </div>
+                  <button type="button" onClick={() => removeOrden(i + 1)} style={{
+                    background: 'none', border: 'none', color: '#E8180A', cursor: 'pointer',
+                    fontSize: '20px', padding: '0 4px 16px', lineHeight: 1,
+                  }}>&times;</button>
+                </div>
+              ))}
+              <button type="button" onClick={addOrden} style={{
+                background: 'none', border: 'none', color: '#378ADD', cursor: 'pointer',
+                fontFamily: 'Rajdhani', fontSize: '12px', fontWeight: 700, padding: '4px 0',
+              }}>+ Agregar otra orden</button>
+            </div>
             <TextInput label="A Cargo De" value={form.a_cargo_de} onChange={set('a_cargo_de')} placeholder="Tecnico instalador" required />
             <TextInput label="Fecha de Entrega" value={form.fecha_entrega} onChange={set('fecha_entrega')} type="date" />
             <TextInput label="Modelo" value={form.modelo} onChange={set('modelo')} placeholder="Toyota Hilux" required />
@@ -54,7 +89,7 @@ export default function FormInstalacion({ user }: Props) {
         </div>
 
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
-          <RadioField label="Es Re-Trabajo?" options={['Si', 'No']} value={form.re_trabajo} onChange={set('re_trabajo')} required />
+          <RadioField label="¿Es Re-Trabajo?" options={['Si', 'No']} value={form.re_trabajo} onChange={set('re_trabajo')} required />
         </div>
 
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
@@ -66,6 +101,17 @@ export default function FormInstalacion({ user }: Props) {
               <span style={{ fontSize: '12px', color: '#555555' }}>{piezas.join(', ')}</span>
             </div>
           )}
+          <div style={{ marginTop: '16px' }}>
+            <label className="label-field">Otras piezas (si no está en la lista)</label>
+            <input
+              className="input-dark"
+              type="text"
+              value={form.piezas_custom}
+              onChange={e => set('piezas_custom')(e.target.value)}
+              placeholder="Ej: Soporte lateral, refuerzo central"
+            />
+            <p style={{ fontSize: '11px', color: '#999999', marginTop: '4px' }}>Los estribos pueden instalarse por separado o en juego</p>
+          </div>
         </div>
 
         <button className="btn-red" type="submit" disabled={loading} style={{ width: '100%', fontSize: '16px' }}>

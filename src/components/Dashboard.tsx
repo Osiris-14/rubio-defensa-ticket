@@ -11,13 +11,14 @@ import FormProduccion from './forms/FormProduccion'
 import FormPintura from './forms/FormPintura'
 import FormInstalacion from './forms/FormInstalacion'
 import FormMarquilla from './forms/FormMarquilla'
+import FormFerre from './forms/FormFerre'
 import TicketsList from './TicketsList'
 
 interface Props { user: AppUser; onLogout: () => void }
 
 type View = 'dashboard' | 'form' | 'tickets'
 
-const AREA_ROLES: UserRole[] = ['recepcion', 'produccion', 'pintura', 'instalacion', 'marquilla']
+const AREA_ROLES: UserRole[] = ['recepcion', 'produccion', 'pintura', 'instalacion', 'marquilla', 'ferre']
 
 const AREA_DESCRIPTIONS: Record<string, string> = {
   recepcion: 'Registro de ingreso de vehiculos al taller',
@@ -25,6 +26,7 @@ const AREA_DESCRIPTIONS: Record<string, string> = {
   pintura: 'Control de pintado de defensas',
   instalacion: 'Registro de instalacion de defensas',
   marquilla: 'Pago y monitoreo de piezas',
+  ferre: 'Control de preparación de piezas',
 }
 
 async function downloadCSV(role: UserRole | 'all') {
@@ -395,7 +397,7 @@ function AdminDashboardView({ user, onLogout }: { user: AppUser; onLogout: () =>
       }
     }
     load()
-    // Admin sees every area, so subscribe to all five tables.
+    // Admin sees every area, so subscribe to all area tables.
     const unsubscribe = subscribeToInserts(AREA_ROLES, load)
     return () => { active = false; unsubscribe() }
   }, [])
@@ -526,6 +528,7 @@ const roleFormMap: Record<UserRole, React.ComponentType<{ user: AppUser; onSucce
   pintura: FormPintura,
   instalacion: FormInstalacion,
   marquilla: FormMarquilla,
+  ferre: FormFerre,
   admin: FormRecepcion,
 }
 
