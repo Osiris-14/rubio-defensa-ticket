@@ -116,67 +116,94 @@ export function horasTranscurridas(fechaCreacion: string, now: number = Date.now
 // Toda la lógica de estado_cxc / pendiente_produccion vive
 // en Supabase. El frontend solo filtra por pendiente_produccion.
 //
-// REQUISITO: Ejecutar el CREATE VIEW (ver recuadro SQL más abajo)
-// en el SQL Editor de Supabase antes de usar estas funciones.
+// SELF-HEAL: si el sync de Alegra borra la vista, PostgREST
+// devuelve PGRST205 ("Could not find the table ... in the schema
+// cache"). Antes de fallar, llamamos al RPC rebuild (vive en
+// public, sobrevive al borrado) y reintentamos una vez.
 // ─────────────────────────────────────────────────────────
 
+const VIEW_MISSING = /could not find.*v_facturas_produccion|v_facturas_produccion.*schema cache/i
+
+async function rebuildView(): Promise<void> {
+  const { error } = await supabase.rpc('rebuild_v_facturas_produccion')
+  if (error) throw new Error(`rebuild_v_facturas_produccion: ${error.message}`)
+}
+
+async function withSelfHeal<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!VIEW_MISSING.test(msg)) throw e
+    await rebuildView()
+    return fn()
+  }
+}
+
 export async function fetchPendientes(): Promise<FacturaProduccion[]> {
-  const { data, error } = await supabase
-    .schema('silver')
-    .from('v_facturas_produccion')
-    .select('*')
-    .eq('pendiente_produccion', true)
-    .order('fecha', { ascending: false })
-  if (error) throw new Error(error.message)
-  return (data ?? []).map(normalizeRow)
+  return withSelfHeal(async () => {
+    const { data, error } = await supabase
+      .schema('silver')
+      .from('v_facturas_produccion')
+      .select('*')
+      .eq('pendiente_produccion', true)
+      .order('fecha', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (data ?? []).map(normalizeRow)
+  })
 }
 
 export async function fetchCompletados(): Promise<CompletadoProduccion[]> {
-  const { data: tickets, error } = await supabase
-    .from('tickets_produccion')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (error) throw new Error(error.message)
-  if (!tickets || tickets.length === 0) return []
+  return withSelfHeal(async () => {
+    const { data: tickets, error } = await supabase
+      .from('tickets_produccion')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    if (!tickets || tickets.length === 0) return []
 
-  const ncfList = tickets.map(t => t.numero_factura)
-  const { data: facturas } = await supabase
-    .schema('silver')
-    .from('v_facturas_produccion')
-    .select('*')
-    .in('factura', ncfList)
-  const facMap = new Map((facturas ?? []).map(f => [f.factura, f]))
+    const ncfList = tickets.map(t => t.numero_factura)
+    const { data: facturas, error: e2 } = await supabase
+      .schema('silver')
+      .from('v_facturas_produccion')
+      .select('*')
+      .in('factura', ncfList)
+    if (e2) throw new Error(e2.message)
+    const facMap = new Map((facturas ?? []).map(f => [f.factura, f]))
 
-  return tickets.map(t => {
-    const v = facMap.get(t.numero_factura)
-    return {
-      ...t,
-      vehiculo: v?.vehiculo ?? null,
-      cliente: v?.cliente ?? null,
-      fecha_factura: v?.fecha ?? null,
-      talonario: v?.talonario ?? null,
-      productos: (v?.productos as ProductoItem[] | null) ?? null,
-    }
+    return tickets.map(t => {
+      const v = facMap.get(t.numero_factura)
+      return {
+        ...t,
+        vehiculo: v?.vehiculo ?? null,
+        cliente: v?.cliente ?? null,
+        fecha_factura: v?.fecha ?? null,
+        talonario: v?.talonario ?? null,
+        productos: (v?.productos as ProductoItem[] | null) ?? null,
+      }
+    })
   })
 }
 
 export async function fetchItems(facturaAlegraId: string): Promise<FacturaItem[]> {
-  const { data, error } = await supabase
-    .schema('silver')
-    .from('facturas_venta_items')
-    .select('factura_alegra_id, linea, item_id, nombre, descripcion, cantidad, total')
-    .eq('factura_alegra_id', facturaAlegraId)
-    .order('linea', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []).map(it => ({
-    factura_alegra_id: it.factura_alegra_id,
-    linea: it.linea,
-    item_id: it.item_id,
-    nombre: it.nombre,
-    descripcion: it.descripcion,
-    cantidad: Number(it.cantidad ?? 0),
-    total: Number(it.total ?? 0),
-  }))
+  return withSelfHeal(async () => {
+    const { data, error } = await supabase
+      .schema('silver')
+      .from('facturas_venta_items')
+      .select('factura_alegra_id, linea, item_id, nombre, descripcion, cantidad, total')
+      .eq('factura_alegra_id', facturaAlegraId)
+      .order('linea', { ascending: true })
+    if (error) throw new Error(error.message)
+    return (data ?? []).map(it => ({
+      factura_alegra_id: it.factura_alegra_id,
+      linea: it.linea,
+      item_id: it.item_id,
+      nombre: it.nombre,
+      descripcion: it.descripcion,
+      cantidad: Number(it.cantidad ?? 0),
+      total: Number(it.total ?? 0),
+    }))
+  })
 }
 
 export async function darDeAlta(

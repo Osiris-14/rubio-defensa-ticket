@@ -123,10 +123,9 @@ GRANT USAGE ON SCHEMA silver TO anon, authenticated;
 GRANT SELECT ON silver.v_facturas_produccion TO anon, authenticated;
 GRANT SELECT ON silver.facturas_venta, silver.facturas_venta_items, silver.contactos TO anon, authenticated;
 
--- Exponer 'silver' a PostgREST. Esto normalmente se hace en
--- Settings -> API -> Exposed schemas del dashboard. Si prefieres por SQL:
---   (descomenta las 2 líneas siguientes; ajusta la lista si ya tienes otros schemas expuestos)
--- ALTER ROLE authenticator SET pgrst.db_schemas = 'public, storage, graphql_public, silver';
--- NOTIFY pgrst, 'reload config';
+-- Exponer 'silver' a PostgREST de forma persistente (nivel rol authenticator).
+-- También puedes hacerlo en Settings -> API -> Exposed schemas del dashboard.
+ALTER ROLE authenticator SET pgrst.db_schemas = 'public, storage, graphql_public, silver';
+NOTIFY pgrst, 'reload config';
 
 NOTIFY pgrst, 'reload schema';
