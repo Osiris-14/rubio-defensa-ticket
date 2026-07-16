@@ -67,43 +67,42 @@ export default function TicketsList({ user }: Props) {
   }
 
   return (
-    <div style={{ animation: 'fadeInUp 0.4s ease' }}>
-      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{ width: '40px', height: '3px', background: '#E8180A', marginBottom: '10px' }} />
-          <h1 style={{ fontFamily: 'Bebas Neue', fontSize: '28px', letterSpacing: '2px', color: '#111111' }}>
-            {user.role === 'admin' ? 'TODOS LOS TICKETS' : 'MIS TICKETS'}
-          </h1>
-          <p style={{ color: '#999999', fontSize: '13px' }}>
-            <span style={{ fontWeight: 700, color: '#E8180A' }}>{filtered.length}</span> ticket(s) encontrado(s)
+    <div style={{ animation: 'fadeInUp 0.4s ease', padding: '40px 48px 64px' }}>
+      {/* Toolbar: búsqueda + exportar. El título ("Todos los tickets") ya vive
+          en el header del workspace — no se repite aquí. */}
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ flex: '1 1 280px', maxWidth: '400px' }}>
+          <div className="input-icon-wrap">
+            <Search size={16} style={{ color: '#ccc' }} />
+            <input
+              className="input-dark"
+              placeholder="Buscar por factura, orden, modelo..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '8px' }}
+            />
+          </div>
+          {/* Conteo de resultados: directamente bajo la búsqueda, muted */}
+          <p style={{ color: '#999999', fontSize: '12px', marginTop: '8px' }}>
+            <span style={{ fontWeight: 700, color: emptyTheme.text }}>{filtered.length}</span> ticket(s) encontrado(s)
           </p>
         </div>
         {user.role !== 'admin' && (
           <button
             onClick={handleExport}
+            onMouseEnter={e => { e.currentTarget.style.background = '#fff5f4'; e.currentTarget.style.borderColor = '#E8180A' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#e5e5e5' }}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
-              background: emptyTheme.bg, color: emptyTheme.text, border: 'none',
+              background: '#FFFFFF', color: '#666666', border: '1px solid #e5e5e5',
               borderRadius: '8px', padding: '10px 16px', cursor: 'pointer',
-              fontFamily: 'Rajdhani', fontSize: '13px', fontWeight: 700,
-              textTransform: 'uppercase', letterSpacing: '0.5px',
+              fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 600,
+              transition: 'background var(--t-fast), border-color var(--t-fast)',
             }}
           >
-            <Download size={15} /> Exportar CSV
+            <Download size={15} style={{ color: '#E8180A' }} /> Exportar CSV
           </button>
         )}
-      </div>
-
-      {/* Search */}
-      <div className="input-icon-wrap" style={{ maxWidth: '400px', marginBottom: '16px' }}>
-        <Search size={16} style={{ color: '#ccc' }} />
-        <input
-          className="input-dark"
-          placeholder="Buscar por factura, orden, modelo..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '8px' }}
-        />
       </div>
 
       {error && (
@@ -129,7 +128,8 @@ export default function TicketsList({ user }: Props) {
           }}>
             <Search size={20} />
           </div>
-          <p style={{ color: '#999999', fontSize: '13px' }}>No hay tickets todavia</p>
+          <p style={{ color: '#111111', fontSize: '15px', fontWeight: 600, marginBottom: '4px' }}>No hay tickets todavía</p>
+          <p style={{ color: '#999999', fontSize: '12px' }}>Los tickets completados aparecerán aquí</p>
         </div>
       ) : (
         <div>
@@ -146,21 +146,15 @@ export default function TicketsList({ user }: Props) {
 
       {/* Detail modal */}
       {selected && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 100, padding: '20px',
-        }} onClick={() => setSelected(null)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: '#FFFFFF', border: '0.5px solid #E5E5E5', borderRadius: '12px',
+        <div className="modal-overlay" onClick={() => setSelected(null)}>
+          <div onClick={e => e.stopPropagation()} className="modal-card" style={{
             padding: '32px', maxWidth: '600px', width: '100%', maxHeight: '80vh', overflowY: 'auto',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.12)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <div>
-                <div style={{ width: '30px', height: '3px', background: '#E8180A', marginBottom: '8px' }} />
-                <h2 style={{ fontFamily: 'Bebas Neue', fontSize: '22px', letterSpacing: '1px', color: '#111111' }}>
-                  DETALLE DEL TICKET
+                <div className="accent-line" style={{ background: emptyTheme.text }} />
+                <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em', color: '#111111' }}>
+                  Detalle del ticket
                 </h2>
               </div>
               <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: '#999999', cursor: 'pointer', fontSize: '20px' }}>&#10005;</button>

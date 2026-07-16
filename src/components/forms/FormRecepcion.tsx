@@ -1,11 +1,13 @@
 'use client'
 import { useState } from 'react'
 import { saveTicket, type AppUser } from '@/lib/store'
+import { AREA_THEME } from '@/lib/areaTheme'
 import { RadioField, PhotoField, TextInput, FormHeader, SuccessMessage } from './FormBase'
 
 interface Props { user: AppUser; onSuccess: () => void }
 
 export default function FormRecepcion({ user, onSuccess }: Props) {
+  const theme = AREA_THEME[user.role]
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -110,7 +112,7 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
 
       <form onSubmit={handleSubmit}>
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
-          <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>INFORMACION BASICA</h3>
+          <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 600, letterSpacing: '0.02em', color: theme.text, marginBottom: '20px' }}>Información básica</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <TextInput label="Numero de Factura" value={form.numero_factura} onChange={set('numero_factura')} placeholder="Ej: F-2025-001" required />
             <div>
@@ -123,7 +125,7 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
         </div>
 
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
-          <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>DATOS DEL VEHICULO</h3>
+          <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 600, letterSpacing: '0.02em', color: theme.text, marginBottom: '20px' }}>Datos del vehículo</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
             <TextInput label="Modelo" value={form.modelo} onChange={set('modelo')} placeholder="Ej: Toyota Hilux" required />
             <TextInput label="Tipo de Modelo" value={form.tipo_modelo} onChange={set('tipo_modelo')} placeholder="Ej: 2023, 4x4" />
@@ -131,7 +133,7 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
         </div>
 
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
-          <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>INSPECCION DEL VEHICULO</h3>
+          <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 600, letterSpacing: '0.02em', color: theme.text, marginBottom: '20px' }}>Inspección del vehículo</h3>
 
           <RadioField label="Micas Rotas" options={['Si', 'NO']} value={form.micas_rotas} onChange={setRadioWithPhoto('micas_rotas', 'micas_rotas_fotos', 'Si')} required />
           {form.micas_rotas === 'Si' && <PhotoField label="Fotos de micas rotas" fieldName="micas_rotas_fotos" photos={photos.micas_rotas_fotos} onChange={f => setPhotos(p => ({ ...p, micas_rotas_fotos: f }))} onStatusChange={photoStatusFor('micas_rotas_fotos')} />}
@@ -161,10 +163,19 @@ export default function FormRecepcion({ user, onSuccess }: Props) {
         )}
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            className="btn-red"
             type="submit"
             disabled={loading || submitBlocked}
-            style={{ flex: 1, fontSize: '16px', letterSpacing: '1px', opacity: (loading || submitBlocked) ? 0.6 : 1 }}
+            style={{
+              flex: 1, fontSize: '16px', letterSpacing: '1px',
+              background: theme.text, color: 'white', border: 'none',
+              padding: '12px 24px', borderRadius: '8px',
+              fontFamily: 'var(--font-sans)', fontWeight: 700,
+              textTransform: 'uppercase', cursor: 'pointer',
+              opacity: (loading || submitBlocked) ? 0.6 : 1,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { if (!loading && !submitBlocked) (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
+            onMouseLeave={e => { if (!loading && !submitBlocked) (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
           >
             {loading
               ? 'Guardando...'

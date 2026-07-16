@@ -1,6 +1,7 @@
 'use client'
 import { useRef, useState } from 'react'
 import { ROLE_LABELS, type UserRole } from '@/lib/store'
+import { AREA_THEME } from '@/lib/areaTheme'
 import { supabase } from '@/lib/supabase'
 
 const BUCKET = 'ticket-fotos'
@@ -307,11 +308,13 @@ export function TextInput({ label, value, onChange, placeholder, required, type 
 }
 
 export function FormHeader({ title, subtitle, role }: { title: string; subtitle: string; role?: UserRole }) {
+  const accentColor = role ? (AREA_THEME[role]?.text || '#E8180A') : '#E8180A'
+
   return (
     <div style={{ marginBottom: '28px' }}>
       {role && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-          <div style={{ width: '28px', height: '3px', background: '#E8180A' }} />
+          <div style={{ width: '28px', height: '3px', background: accentColor, borderRadius: '2px' }} />
           <span style={{ fontSize: '10px', color: '#BBBBBB', textTransform: 'uppercase', letterSpacing: '1px' }}>
             {ROLE_LABELS[role]}
           </span>
@@ -331,9 +334,9 @@ export function SuccessMessage({ onNew }: { onNew: () => void }) {
       animation: 'fadeInUp 0.4s ease',
       boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
     }}>
-      <div style={{ fontSize: '32px', color: '#00a050', marginBottom: '16px', fontFamily: 'Bebas Neue', letterSpacing: '2px' }}>&#10003; LISTO</div>
-      <h2 style={{ fontFamily: 'Bebas Neue', fontSize: '28px', color: '#111111', letterSpacing: '2px', marginBottom: '8px' }}>
-        TICKET GUARDADO
+      <div style={{ fontSize: '40px', color: '#00a050', marginBottom: '12px', lineHeight: 1 }}>&#10003;</div>
+      <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: '24px', fontWeight: 700, color: '#111111', letterSpacing: '-0.02em', marginBottom: '8px' }}>
+        Ticket guardado
       </h2>
       <p style={{ color: '#888888', marginBottom: '24px' }}>El ticket fue registrado exitosamente</p>
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>

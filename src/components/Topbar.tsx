@@ -8,9 +8,10 @@ interface Props {
   circleBg: string
   circleBorder: string
   circleText: string
+  accentColor?: string
 }
 
-export default function Topbar({ user, onLogout, circleBg, circleBorder, circleText }: Props) {
+export default function Topbar({ user, onLogout, circleBg, circleBorder, circleText, accentColor }: Props) {
   const initials = user.name
     .split(' ')
     .map(n => n.charAt(0))
@@ -18,16 +19,21 @@ export default function Topbar({ user, onLogout, circleBg, circleBorder, circleT
     .join('')
     .toUpperCase()
   const date = new Date().toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const borderColor = accentColor || '#E8180A'
 
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '20px 26px', borderBottom: '2px solid #E8180A',
+      padding: '20px 26px',
       marginBottom: '28px', flexWrap: 'wrap', gap: '12px',
+      background: '#FFFFFF', borderRadius: '12px',
+      boxShadow: 'var(--shadow-sm)',
+      border: '0.5px solid var(--border-subtle)',
+      borderBottom: `2px solid ${borderColor}`,
     }}>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Sparkles size={14} style={{ color: '#E8180A', flexShrink: 0 }} />
+          <Sparkles size={14} style={{ color: borderColor, flexShrink: 0 }} />
           <span style={{ fontSize: '14px', color: '#999' }}>Bienvenido,&nbsp;</span>
           <span style={{ fontSize: '14px', fontWeight: 700, color: '#111' }}>{user.name}</span>
         </div>

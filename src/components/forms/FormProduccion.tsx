@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { saveTicket, PIEZAS_OPTIONS, type AppUser } from '@/lib/store'
+import { AREA_THEME } from '@/lib/areaTheme'
 import { RadioField, TextInput, CheckboxGroup, FormHeader, SuccessMessage } from './FormBase'
 
 interface Props { user: AppUser; onSuccess: () => void }
@@ -13,6 +14,7 @@ const EMPTY = {
 }
 
 export default function FormProduccion({ user }: Props) {
+  const theme = AREA_THEME[user.role]
   const [form, setForm] = useState(EMPTY)
   const [piezas, setPiezas] = useState<string[]>([])
   const [ordenes, setOrdenes] = useState<string[]>([''])
@@ -64,7 +66,7 @@ export default function FormProduccion({ user }: Props) {
       <FormHeader title="Ticket de Produccion" subtitle="Orden de fabricacion de piezas" role={user.role} />
       <form onSubmit={handleSubmit}>
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
-          <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>INFORMACION DE ORDEN</h3>
+          <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 600, letterSpacing: '0.02em', color: theme.text, marginBottom: '20px' }}>Información de orden</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <TextInput label="Numero de Factura" value={form.numero_factura} onChange={set('numero_factura')} placeholder="F-2025-001" required />
             <div>
@@ -82,7 +84,7 @@ export default function FormProduccion({ user }: Props) {
               ))}
               <button type="button" onClick={addOrden} style={{
                 background: 'none', border: 'none', color: '#378ADD', cursor: 'pointer',
-                fontFamily: 'Rajdhani', fontSize: '12px', fontWeight: 700, padding: '4px 0',
+                fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 700, padding: '4px 0',
               }}>+ Agregar otra orden</button>
             </div>
             <TextInput label="A cargo de (mesa o nombre)" value={form.a_cargo_de} onChange={set('a_cargo_de')} placeholder="Ej: Mesa 3 o nombre del responsable" required />
@@ -102,18 +104,18 @@ export default function FormProduccion({ user }: Props) {
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
           <RadioField label="¿Es Re-Trabajo?" options={['Si', 'No']} value={form.re_trabajo} onChange={set('re_trabajo')} required />
           {form.re_trabajo === 'Si' && (
-            <div style={{ marginTop: '12px', padding: '16px', background: 'rgba(232,24,10,0.03)', borderRadius: '6px', border: '1px solid rgba(232,24,10,0.1)' }}>
+            <div style={{ marginTop: '12px', padding: '16px', background: theme.bg, borderRadius: '6px', border: `1px solid ${theme.text}22` }}>
               <RadioField label="Grado de reparación" options={['Grado A', 'Grado B', 'Grado C']} value={form.grado_reparacion} onChange={set('grado_reparacion')} required />
             </div>
           )}
         </div>
 
         <div className="card-dark" style={{ padding: '28px', marginBottom: '20px' }}>
-          <h3 style={{ fontFamily: 'Rajdhani', fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', color: '#E8180A', textTransform: 'uppercase' as const, marginBottom: '20px' }}>PIEZAS A PRODUCIR</h3>
+          <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 600, letterSpacing: '0.02em', color: theme.text, marginBottom: '20px' }}>Piezas a producir</h3>
           <CheckboxGroup label="Selecciona las piezas" options={PIEZAS_OPTIONS} selected={piezas} onChange={setPiezas} required />
           {piezas.length > 0 && (
-            <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(232,24,10,0.05)', borderRadius: '6px', border: '1px solid rgba(232,24,10,0.2)' }}>
-              <span style={{ fontSize: '12px', color: '#E8180A', fontWeight: 700 }}>{piezas.length} pieza(s) seleccionada(s): </span>
+            <div style={{ marginTop: '12px', padding: '12px', background: `${theme.bg}`, borderRadius: '6px', border: `1px solid ${theme.text}33` }}>
+              <span style={{ fontSize: '12px', color: theme.text, fontWeight: 700 }}>{piezas.length} pieza(s) seleccionada(s): </span>
               <span style={{ fontSize: '12px', color: '#555555' }}>{piezas.join(', ')}</span>
             </div>
           )}
@@ -129,7 +131,22 @@ export default function FormProduccion({ user }: Props) {
           </div>
         </div>
 
-        <button className="btn-red" type="submit" disabled={loading} style={{ width: '100%', fontSize: '16px' }}>
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            width: '100%', fontSize: '16px',
+            background: theme.text, color: 'white', border: 'none',
+            padding: '12px 24px', borderRadius: '8px',
+            fontFamily: 'var(--font-sans)', fontWeight: 700,
+            letterSpacing: '0.5px', cursor: 'pointer',
+            textTransform: 'uppercase',
+            opacity: loading ? 0.6 : 1,
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
+          onMouseLeave={e => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
+        >
           {loading ? 'Guardando...' : 'GUARDAR TICKET DE PRODUCCION'}
         </button>
       </form>
