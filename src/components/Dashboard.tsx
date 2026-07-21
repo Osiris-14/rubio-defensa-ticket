@@ -1,11 +1,11 @@
 'use client'
 import { useState, useEffect, type ReactNode } from 'react'
-import { type AppUser, type UserRole, ROLE_LABELS, ROLE_COLORS, getStatsForRole, getTickets, ticketsToCSV } from '@/lib/store'
+import { type AppUser, type UserRole, ROLE_LABELS, ROLE_COLORS, getStatsForRole, getTickets } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { AREA_THEME } from '@/lib/areaTheme'
 import {
-  ArrowLeft, ArrowRight, Download, RefreshCw, Calendar, ChartColumn as BarChart3,
-  LayoutDashboard, Plus, ListChecks, Settings, LogOut, ChevronLeft, ChevronRight, Bell, AlertCircle, Wallet, CalendarDays, Gauge,
+  ArrowLeft, ArrowRight, RefreshCw, Calendar, ChartColumn as BarChart3,
+  LayoutDashboard, Plus, ListChecks, Settings, LogOut, ChevronLeft, ChevronRight, Bell, Wallet, CalendarDays, Gauge,
   type LucideIcon,
 } from 'lucide-react'
 import TicketRow from './TicketRow'
@@ -20,7 +20,7 @@ import ProduccionView from './produccion-v2/ProduccionView'
 import PagosView from './pagos/PagosView'
 import CalendarioProduccionView from './calendario/CalendarioProduccionView'
 import DashboardCapacidadView from './calendario/DashboardCapacidadView'
-import { fetchProductionKpis, type ProductionKpis } from '@/lib/production-v2'
+import AdminHome from './dashboard/AdminHome'
 
 interface Props { user: AppUser; onLogout: () => void }
 
@@ -34,24 +34,6 @@ const AREA_DESCRIPTIONS: Record<string, string> = {
   instalacion: 'Registro de instalación de defensas',
   marquilla: 'Pago y monitoreo de piezas',
   ferre: 'Control de preparación de piezas',
-}
-
-async function downloadCSV(role: UserRole | 'all') {
-  let csv: string
-  try {
-    csv = await ticketsToCSV(role === 'all' ? 'admin' : role)
-  } catch (err) {
-    alert('Error al exportar: ' + (err as Error).message)
-    return
-  }
-  if (!csv) { alert('No hay tickets para exportar en esta area.'); return }
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `rubio_${role}_${new Date().toISOString().split('T')[0]}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 function subscribeToInserts(roles: UserRole[], onInsert: () => void): () => void {
@@ -309,8 +291,8 @@ export default function Dashboard({ user, onLogout }: Props) {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {view === 'dashboard' && (
-            isAdmin
-              ? <AdminDashboardView user={user} onLogout={onLogout} />
+            isAdmin || user.role === 'produccion'
+              ? <AdminHome user={user} onNavigate={v => setView(v as View)} canExport={isAdmin} />
               : <DashboardView user={user} onNavigateForm={() => setView('form')} />
           )}
           {view === 'form' && (
@@ -469,11 +451,6 @@ function PageHeaderBar({ eyebrow, title, subtitle, onLogout }: {
 
 /* ── Shared bits ─────────────────────────────────────────── */
 const bigNum = { fontSize: 36, fontWeight: 700, color: 'var(--gray-900)', lineHeight: 1, letterSpacing: '-0.03em' } as const
-const exportBtnBase = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-  padding: '11px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', cursor: 'pointer',
-  fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', color: 'var(--gray-700)',
-} as const
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -490,58 +467,6 @@ function LoadingBlock() {
   return (
     <div style={{ padding: '48px 24px', textAlign: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', color: 'var(--gray-500)', fontSize: 13.5 }}>
       Cargando…
-    </div>
-  )
-}
-
-function StatLabel({ text }: { text: string }) {
-  return (
-    <div style={{ fontSize: 11, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, fontWeight: 600 }}>
-      {text}
-    </div>
-  )
-}
-
-function ProdKpi({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="kpi" style={{ borderTop: '2px solid var(--amber)' }}>
-      <StatLabel text={label} />
-      <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--gray-900)', lineHeight: 1, letterSpacing: '-0.02em' }}>{value}</div>
-    </div>
-  )
-}
-
-function formatProdMoney(n: number): string {
-  return 'RD$ ' + n.toLocaleString('es-DO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-}
-
-type AreaDatum = { role: UserRole; tickets: Record<string, unknown>[]; total: number; today: number; retrabajos: number }
-
-function AreaBreakdown({ data, getValue }: { data: AreaDatum[]; getValue: (d: AreaDatum) => number }) {
-  const total = data.reduce((s, d) => s + getValue(d), 0)
-  return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ display: 'flex', height: 5, borderRadius: 3, overflow: 'hidden', marginBottom: 10, background: 'var(--gray-100)' }}>
-        {data.map(d => {
-          const w = total > 0 ? (getValue(d) / total) * 100 : 0
-          return w > 0 ? <div key={d.role} style={{ width: `${w}%`, background: AREA_THEME[d.role].borderTop }} /> : null
-        })}
-      </div>
-      <div>
-        {data.map(d => {
-          const t = AREA_THEME[d.role]
-          const Icon = t.icon
-          return (
-            <div key={d.role} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon size={11} style={{ color: t.borderTop }} />
-                <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>{ROLE_LABELS[d.role]}</span>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--gray-700)' }}>{getValue(d)}</span>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }
@@ -640,217 +565,6 @@ function DashboardView({ user, onNavigateForm }: {
           {tickets.slice(0, 8).map((t, i) => <TicketRow key={i} ticket={t} role={user.role} />)}
         </div>
       )}
-    </div>
-  )
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function AdminDashboardView({ user: _user }: { user: AppUser; onLogout: () => void }) {
-  const [allTickets, setAllTickets] = useState<Record<string, unknown>[]>([])
-  const [totalStats, setTotalStats] = useState({ total: 0, today: 0, week: 0, month: 0, retrabajos: 0 })
-  const [areaData, setAreaData] = useState<AreaDatum[]>([])
-  const [prodKpis, setProdKpis] = useState<ProductionKpis | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    let active = true
-    async function load() {
-      try {
-        const perArea = await Promise.all(AREA_ROLES.map(role => getTickets(role)))
-        if (!active) return
-        const now = new Date()
-        const today = now.toDateString()
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-
-        const data: AreaDatum[] = AREA_ROLES.map((role, i) => {
-          const tickets = perArea[i]
-          return {
-            role,
-            tickets,
-            total: tickets.length,
-            today: tickets.filter(t => new Date(t.created_at as string).toDateString() === today).length,
-            retrabajos: tickets.filter(t => t.re_trabajo === 'Si').length,
-          }
-        })
-        const combined = data
-          .flatMap(d => d.tickets)
-          .sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime())
-
-        setAreaData(data)
-        setAllTickets(combined)
-        setTotalStats({
-          total: combined.length,
-          today: combined.filter(t => new Date(t.created_at as string).toDateString() === today).length,
-          week: combined.filter(t => new Date(t.created_at as string) >= weekAgo).length,
-          month: combined.filter(t => new Date(t.created_at as string) >= monthAgo).length,
-          retrabajos: combined.filter(t => t.re_trabajo === 'Si').length,
-        })
-        setError('')
-      } catch (err) {
-        if (active) setError((err as Error).message)
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-    load()
-    // KPIs de producción (no rompen el dashboard si las tablas nuevas no existen)
-    fetchProductionKpis().then(k => { if (active) setProdKpis(k) }).catch(() => {})
-    const unsubscribe = subscribeToInserts(AREA_ROLES, load)
-    return () => { active = false; unsubscribe() }
-  }, [])
-
-  const topRework = areaData.length
-    ? areaData.reduce((a, b) => (b.retrabajos > a.retrabajos ? b : a), areaData[0])
-    : null
-
-  return (
-    <div style={{ animation: 'fadeInUp 0.3s ease', padding: '40px 48px 64px' }}>
-      {error && <ErrorBanner message={error} />}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 32 }}>
-        <div className="kpi" style={{ borderTop: '2px solid var(--red)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <StatLabel text="TOTAL — TODAS LAS AREAS" />
-            <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: 'var(--red-50)', color: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Calendar size={14} strokeWidth={1.75} />
-            </div>
-          </div>
-          <div style={bigNum}>{totalStats.total}</div>
-          <AreaBreakdown data={areaData} getValue={d => d.total} />
-        </div>
-        <div className="kpi" style={{ borderTop: '2px solid var(--blue)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <StatLabel text="TICKETS HOY" />
-            <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: 'var(--blue-bg)', color: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Calendar size={14} strokeWidth={1.75} />
-            </div>
-          </div>
-          <div style={bigNum}>{totalStats.today}</div>
-        </div>
-        <div className="kpi" style={{ borderTop: '2px solid var(--amber)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <StatLabel text="RE-TRABAJOS" />
-            <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: 'var(--amber-bg)', color: 'var(--amber)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertCircle size={14} strokeWidth={1.75} />
-            </div>
-          </div>
-          <div style={bigNum}>{totalStats.retrabajos}</div>
-          <div style={{ fontSize: 11, color: 'var(--gray-500)', marginTop: 10 }}>
-            {totalStats.retrabajos > 0 && topRework
-              ? <>Más en <span style={{ color: AREA_THEME[topRework.role].text, fontWeight: 700 }}>{ROLE_LABELS[topRework.role]}</span> ({topRework.retrabajos})</>
-              : 'Sin re-trabajos'}
-          </div>
-        </div>
-      </div>
-
-      {/* KPIs de Producción */}
-      {prodKpis && (
-        <>
-          <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-900)', marginBottom: 16, letterSpacing: '-0.01em' }}>Producción</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
-            <ProdKpi label="Órdenes" value={String(prodKpis.ordenes)} />
-            <ProdKpi label="Tickets Pendientes" value={String(prodKpis.tickets_pendientes)} />
-            <ProdKpi label="Tickets Completados" value={String(prodKpis.tickets_completados)} />
-            <ProdKpi label="Costo producción hoy" value={formatProdMoney(prodKpis.costo_hoy)} />
-            <ProdKpi label="Costo producción semana" value={formatProdMoney(prodKpis.costo_semana)} />
-            <ProdKpi label="Costo producción mes" value={formatProdMoney(prodKpis.costo_mes)} />
-          </div>
-        </>
-      )}
-
-      <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-900)', marginBottom: 16, letterSpacing: '-0.01em' }}>Resumen por área</h2>
-      {loading && <LoadingBlock />}
-      <div className="card" style={{ padding: 0, marginBottom: 40, overflow: 'hidden' }}>
-        {areaData.map(({ role, total }, index) => {
-          const t = AREA_THEME[role]
-          const Icon = t.icon
-          return (
-            <div key={role} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '18px 22px', background: 'var(--bg-card)',
-              borderBottom: index < areaData.length - 1 ? '1px solid var(--border)' : 'none',
-              transition: 'background var(--t-fast)',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-card-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-card)')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 'var(--radius)',
-                  background: t.bg, color: t.text,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Icon size={16} strokeWidth={1.75} />
-                </div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--gray-900)' }}>{ROLE_LABELS[role]}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontSize: 11, color: 'var(--gray-500)', fontWeight: 600 }}>tickets</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--gray-900)' }}>{total}</span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-900)', marginBottom: 16, letterSpacing: '-0.01em' }}>Todos los tickets</h2>
-      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 40 }}>
-        {loading ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--gray-500)' }}>Cargando…</div>
-        ) : allTickets.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--gray-500)' }}>No hay tickets registrados aun.</div>
-        ) : (
-          <table className="table-dark">
-            <thead>
-              <tr><th>Factura</th><th>Orden</th><th>Modelo</th><th>Area</th><th>Responsable</th><th>Fecha</th></tr>
-            </thead>
-            <tbody>
-              {allTickets.map((t, i) => {
-                const role = t.role as UserRole
-                const color = ROLE_COLORS[role] || '#888'
-                return (
-                  <tr key={i}>
-                    <td style={{ color: 'var(--gray-900)', fontWeight: 600 }}>{String(t.numero_factura || '-')}</td>
-                    <td>{String(t.numero_orden || '-')}</td>
-                    <td>{String(t.modelo || '-')}</td>
-                    <td>
-                      <span className="badge" style={{ background: `${color}12`, color, border: `1px solid ${color}33` }}>
-                        {ROLE_LABELS[role] || String(role)}
-                      </span>
-                    </td>
-                    <td>{String(t.user_name || t.a_cargo_de || t.entregado_por || '-')}</td>
-                    <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>
-                      {new Date(t.created_at as string).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-900)', marginBottom: 16, letterSpacing: '-0.01em' }}>Exportar CSV</h2>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-        <button onClick={() => downloadCSV('all')} style={{
-          ...exportBtnBase, background: 'var(--red)', color: '#fff', border: 'none',
-          boxShadow: 'var(--shadow-sm)',
-        }}>
-          <Download size={14} /> Todos los tickets
-        </button>
-        {AREA_ROLES.map(role => {
-          const t = AREA_THEME[role]
-          return (
-            <button key={role} onClick={() => downloadCSV(role)} style={{
-              ...exportBtnBase, color: t.text, border: `1px solid ${t.borderTop}22`,
-            }}>
-              <Download size={14} /> {ROLE_LABELS[role]}
-            </button>
-          )
-        })}
-      </div>
     </div>
   )
 }
