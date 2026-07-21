@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { AREA_THEME } from '@/lib/areaTheme'
 import {
   ArrowLeft, ArrowRight, Download, RefreshCw, Calendar, ChartColumn as BarChart3,
-  LayoutDashboard, Plus, ListChecks, Settings, LogOut, ChevronLeft, ChevronRight, Bell, AlertCircle,
+  LayoutDashboard, Plus, ListChecks, Settings, LogOut, ChevronLeft, ChevronRight, Bell, AlertCircle, Wallet, CalendarDays, Gauge,
   type LucideIcon,
 } from 'lucide-react'
 import TicketRow from './TicketRow'
@@ -16,11 +16,15 @@ import FormInstalacion from './forms/FormInstalacion'
 import FormMarquilla from './forms/FormMarquilla'
 import FormFerre from './forms/FormFerre'
 import TicketsList from './TicketsList'
-import ProduccionView from './produccion/ProduccionView'
+import ProduccionView from './produccion-v2/ProduccionView'
+import PagosView from './pagos/PagosView'
+import CalendarioProduccionView from './calendario/CalendarioProduccionView'
+import DashboardCapacidadView from './calendario/DashboardCapacidadView'
+import { fetchProductionKpis, type ProductionKpis } from '@/lib/production-v2'
 
 interface Props { user: AppUser; onLogout: () => void }
 
-type View = 'dashboard' | 'form' | 'tickets' | 'produccion'
+type View = 'dashboard' | 'form' | 'tickets' | 'produccion' | 'pagos' | 'calendario' | 'capacidad'
 
 const AREA_ROLES: UserRole[] = ['recepcion', 'produccion', 'pintura', 'instalacion', 'marquilla', 'ferre']
 const AREA_DESCRIPTIONS: Record<string, string> = {
@@ -72,6 +76,9 @@ const VIEW_META: Record<View, { eyebrow: string; title: string; subtitle: string
   produccion: { eyebrow: 'Tickets',      title: 'Producción',             subtitle: 'Las facturas de Alegra aparecen aquí automáticamente.' },
   form:       { eyebrow: 'Crear',        title: 'Nuevo ticket',           subtitle: 'Crea un ticket manual para cualquier área.' },
   tickets:    { eyebrow: 'Tickets',      title: 'Todos los tickets',      subtitle: 'Historial completo de tickets en el sistema.' },
+  pagos:      { eyebrow: 'Pagos',        title: 'Pagos y Nóminas',        subtitle: 'Cálculo automático desde los movimientos de producción.' },
+  calendario: { eyebrow: 'Planificación',title: 'Calendario de Producción', subtitle: 'Planificación de capacidad por día, área y empleado.' },
+  capacidad:  { eyebrow: 'Capacidad',    title: 'Dashboard de Capacidad', subtitle: 'Visualiza la carga y configura capacidades diarias.' },
 }
 
 export default function Dashboard({ user, onLogout }: Props) {
@@ -82,9 +89,12 @@ export default function Dashboard({ user, onLogout }: Props) {
   const isAdmin = user.role === 'admin'
   const userInitials = user.name.split(' ').map(n => n.charAt(0)).slice(0, 2).join('').toUpperCase()
 
-  const allNavItems: { id: View; label: string; icon: LucideIcon; group: 'main' | 'ops' }[] = [
+  const allNavItems: { id: View; label: string; icon: LucideIcon; group: 'main' | 'ops' | 'plan' }[] = [
     { id: 'dashboard',  label: 'Dashboard',  icon: LayoutDashboard, group: 'main' },
     { id: 'produccion', label: 'Producción', icon: Settings,       group: 'ops' },
+    { id: 'pagos',      label: 'Pagos',      icon: Wallet,         group: 'ops' },
+    { id: 'calendario', label: 'Calendario', icon: CalendarDays,   group: 'plan' },
+    { id: 'capacidad',  label: 'Capacidad',  icon: Gauge,          group: 'plan' },
     { id: 'form',       label: 'Nuevo ticket', icon: Plus,         group: 'ops' },
     { id: 'tickets',    label: 'Todos los tickets', icon: ListChecks, group: 'ops' },
   ]
@@ -92,9 +102,13 @@ export default function Dashboard({ user, onLogout }: Props) {
   // ni tiene "Mis tickets" — su equivalente es la pestaña Completados dentro de
   // la vista Producción. Solo ve Dashboard + Producción. El resto de roles
   // (recepción, pintura, instalación, marquilla, ferré, admin) no cambian.
-  const navItems = user.role === 'produccion'
-    ? allNavItems.filter(i => i.id === 'dashboard' || i.id === 'produccion')
-    : allNavItems
+  // Pagos / Calendario / Capacidad son solo para admin (nóminas, planificación).
+  const navItems = allNavItems.filter(i => {
+    if (i.id === 'pagos' && user.role !== 'admin') return false
+    if ((i.id === 'calendario' || i.id === 'capacidad') && user.role !== 'admin' && user.role !== 'produccion') return false
+    if (user.role === 'produccion' && !(i.id === 'dashboard' || i.id === 'produccion' || i.id === 'calendario' || i.id === 'capacidad')) return false
+    return true
+  })
 
   const meta = VIEW_META[view]
 
@@ -235,6 +249,30 @@ export default function Dashboard({ user, onLogout }: Props) {
                 />
               )
             })}
+
+            {navItems.filter(i => i.group === 'plan').length > 0 && (
+              <>
+                {!collapsed && (
+                  <div style={{ padding: '0 10px 8px', marginTop: 18, fontSize: 10, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.14em', fontWeight: 600 }}>
+                    Planificación
+                  </div>
+                )}
+                {navItems.filter(i => i.group === 'plan').map(item => {
+                  const active = view === item.id
+                  const ItemIcon = item.icon
+                  return (
+                    <SidebarItem
+                      key={item.id}
+                      active={active}
+                      collapsed={collapsed}
+                      icon={<ItemIcon size={16} strokeWidth={1.75} />}
+                      label={item.label}
+                      onClick={() => setView(item.id)}
+                    />
+                  )
+                })}
+              </>
+            )}
           </nav>
 
           {/* Logout */}
@@ -259,8 +297,8 @@ export default function Dashboard({ user, onLogout }: Props) {
         flexDirection: 'column',
         background: 'var(--bg-page)',
       }}>
-        {/* Header con breadcrumb — solo para vistas tradicionales; Producción lo gestiona internamente */}
-        {view !== 'produccion' && (
+        {/* Header con breadcrumb — solo para vistas tradicionales; Producción, Pagos, Calendario y Capacidad lo gestionan internamente */}
+        {view !== 'produccion' && view !== 'pagos' && view !== 'calendario' && view !== 'capacidad' && (
           <PageHeaderBar
             eyebrow={meta.eyebrow}
             title={meta.title}
@@ -280,6 +318,9 @@ export default function Dashboard({ user, onLogout }: Props) {
           )}
           {view === 'tickets' && <TicketsList user={user} />}
           {view === 'produccion' && <ProduccionView user={user} />}
+          {view === 'pagos' && <PagosView user={user} />}
+          {view === 'calendario' && <CalendarioProduccionView user={user} />}
+          {view === 'capacidad' && <DashboardCapacidadView user={user} />}
         </div>
       </div>
 
@@ -288,9 +329,21 @@ export default function Dashboard({ user, onLogout }: Props) {
         {navItems.map(item => (
           <button key={item.id} className={`bottom-nav-btn ${view === item.id ? 'active' : ''}`} onClick={() => setView(item.id)}>
             <span className="bottom-nav-btn-sym">
-              {item.id === 'dashboard' ? '⌂' : item.id === 'form' ? '+' : item.id === 'produccion' ? '⚙' : '☰'}
+              {item.id === 'dashboard' ? '⌂'
+                : item.id === 'form' ? '+'
+                : item.id === 'produccion' ? '⚙'
+                : item.id === 'pagos' ? '¥'
+                : item.id === 'calendario' ? '▦'
+                : item.id === 'capacidad' ? '☰'
+                : '☰'}
             </span>
-            <span>{item.id === 'tickets' ? 'Tickets' : item.id === 'form' ? 'Nuevo' : item.id === 'produccion' ? 'Prod.' : 'Inicio'}</span>
+            <span>{item.id === 'tickets' ? 'Tickets'
+              : item.id === 'form' ? 'Nuevo'
+              : item.id === 'produccion' ? 'Prod.'
+              : item.id === 'pagos' ? 'Pagos'
+              : item.id === 'calendario' ? 'Cal.'
+              : item.id === 'capacidad' ? 'Cap.'
+              : 'Inicio'}</span>
           </button>
         ))}
       </nav>
@@ -449,6 +502,19 @@ function StatLabel({ text }: { text: string }) {
   )
 }
 
+function ProdKpi({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="kpi" style={{ borderTop: '2px solid var(--amber)' }}>
+      <StatLabel text={label} />
+      <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--gray-900)', lineHeight: 1, letterSpacing: '-0.02em' }}>{value}</div>
+    </div>
+  )
+}
+
+function formatProdMoney(n: number): string {
+  return 'RD$ ' + n.toLocaleString('es-DO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
 type AreaDatum = { role: UserRole; tickets: Record<string, unknown>[]; total: number; today: number; retrabajos: number }
 
 function AreaBreakdown({ data, getValue }: { data: AreaDatum[]; getValue: (d: AreaDatum) => number }) {
@@ -583,6 +649,7 @@ function AdminDashboardView({ user: _user }: { user: AppUser; onLogout: () => vo
   const [allTickets, setAllTickets] = useState<Record<string, unknown>[]>([])
   const [totalStats, setTotalStats] = useState({ total: 0, today: 0, week: 0, month: 0, retrabajos: 0 })
   const [areaData, setAreaData] = useState<AreaDatum[]>([])
+  const [prodKpis, setProdKpis] = useState<ProductionKpis | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -628,6 +695,8 @@ function AdminDashboardView({ user: _user }: { user: AppUser; onLogout: () => vo
       }
     }
     load()
+    // KPIs de producción (no rompen el dashboard si las tablas nuevas no existen)
+    fetchProductionKpis().then(k => { if (active) setProdKpis(k) }).catch(() => {})
     const unsubscribe = subscribeToInserts(AREA_ROLES, load)
     return () => { active = false; unsubscribe() }
   }, [])
@@ -675,6 +744,21 @@ function AdminDashboardView({ user: _user }: { user: AppUser; onLogout: () => vo
           </div>
         </div>
       </div>
+
+      {/* KPIs de Producción */}
+      {prodKpis && (
+        <>
+          <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-900)', marginBottom: 16, letterSpacing: '-0.01em' }}>Producción</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
+            <ProdKpi label="Órdenes" value={String(prodKpis.ordenes)} />
+            <ProdKpi label="Tickets Pendientes" value={String(prodKpis.tickets_pendientes)} />
+            <ProdKpi label="Tickets Completados" value={String(prodKpis.tickets_completados)} />
+            <ProdKpi label="Costo producción hoy" value={formatProdMoney(prodKpis.costo_hoy)} />
+            <ProdKpi label="Costo producción semana" value={formatProdMoney(prodKpis.costo_semana)} />
+            <ProdKpi label="Costo producción mes" value={formatProdMoney(prodKpis.costo_mes)} />
+          </div>
+        </>
+      )}
 
       <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-900)', marginBottom: 16, letterSpacing: '-0.01em' }}>Resumen por área</h2>
       {loading && <LoadingBlock />}
