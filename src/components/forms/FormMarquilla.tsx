@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { saveTicket, PIEZAS_OPTIONS, type AppUser } from '@/lib/store'
+import { friendlyError } from '@/lib/errorMessages'
 import { AREA_THEME } from '@/lib/areaTheme'
 import { TextInput, CheckboxGroup, FormHeader, SuccessMessage } from './FormBase'
 
@@ -25,7 +26,7 @@ export default function FormMarquilla({ user }: Props) {
       await saveTicket('marquilla', { ...form, piezas, user_id: user.id, user_name: user.name })
       setSubmitted(true)
     } catch (err) {
-      alert('No se pudo guardar el ticket: ' + (err as Error).message)
+      alert(friendlyError(err))
     } finally {
       setLoading(false)
     }

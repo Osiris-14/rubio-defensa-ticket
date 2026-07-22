@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useTransition } from 'react'
-import { X, User, AlertCircle, ChevronRight } from 'lucide-react'
+import { X, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react'
 import {
   fetchProductionTicketFull,
   fetchProductionEmployees,
@@ -10,6 +10,7 @@ import {
   type ProductionEmployee,
 } from '@/lib/production-v2'
 import { confirmStep } from '@/app/actions/production'
+import { friendlyError } from '@/lib/errorMessages'
 import { Toast } from '@/components/ui'
 
 interface Props {
@@ -32,7 +33,7 @@ export default function StageDialog ({ ticket, step, onConfirmed, onClose }: Pro
     let active = true
     fetchProductionEmployees()
       .then(e => { if (active) setEmployees(e) })
-      .catch(e => setError(e instanceof Error ? e.message : String(e)))
+      .catch(e => setError(friendlyError(e)))
       .finally(() => { if (active) setLoadingEmp(false) })
     return () => { active = false }
   }, [])
@@ -43,14 +44,18 @@ export default function StageDialog ({ ticket, step, onConfirmed, onClose }: Pro
   const pendingPieces = localTicket.pieces.filter(p => !donePieces.has(p.piece_name))
 
   async function reloadLocal () {
-    const t = await fetchProductionTicketFull(localTicket.id)
-    if (t) setLocalTicket(t)
+    try {
+      const t = await fetchProductionTicketFull(localTicket.id)
+      if (t) setLocalTicket(t)
+    } catch (e) {
+      setError(friendlyError(e))
+    }
   }
 
   // Cuando ya no quedan piezas pendientes para esta etapa → avisar al padre
   useEffect(() => {
     if (pendingPieces.length === 0 && localTicket.pieces.length > 0) {
-      const t = setTimeout(() => { setToast(true); onConfirmed() }, 700)
+      const t = setTimeout(() => { setToast(true); onConfirmed() }, 800)
       return () => clearTimeout(t)
     }
   }, [pendingPieces.length, localTicket.pieces.length, onConfirmed])
@@ -60,38 +65,37 @@ export default function StageDialog ({ ticket, step, onConfirmed, onClose }: Pro
   return (
     <div className='modal-overlay' onClick={() => !pending && onClose()}>
       <div onClick={e => e.stopPropagation()} className='modal-card' style={{
-        padding: 0, maxWidth: 560, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        padding: 0, maxWidth: 560, width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column',
       }}>
         {/* Header */}
         <div style={{
-          padding: '22px 28px 18px', borderBottom: '1px solid var(--border)',
+          padding: '20px 24px 16px', borderBottom: '1px solid var(--border)',
           display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16,
         }}>
           <div>
-            <div className='eyebrow' style={{ color: 'var(--red)', marginBottom: 8 }}>Etapa de producción</div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)', letterSpacing: '-0.02em', margin: 0 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--gray-900)', letterSpacing: '-0.02em', margin: 0 }}>
               {STEP_LABELS[step]}
             </h2>
-            <p style={{ fontSize: 13, color: 'var(--gray-500)', marginTop: 6 }}>
-              {pendingPieces.length} pieza{pendingPieces.length !== 1 ? 's' : ''} por confirmar · precio automático desde el tarifario
+            <p style={{ fontSize: 13.5, color: 'var(--gray-500)', marginTop: 4 }}>
+              {pendingPieces.length} pieza{pendingPieces.length !== 1 ? 's' : ''} por confirmar
             </p>
           </div>
           <button onClick={() => !pending && onClose()} aria-label='Cerrar'
             style={{ background: 'transparent', border: 'none', color: 'var(--gray-500)', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
         {/* Body */}
-        <div style={{ padding: '20px 28px', flex: 1, overflowY: 'auto' }}>
+        <div style={{ padding: '20px 24px 24px', flex: 1, overflowY: 'auto' }}>
           {loadingEmp ? (
-            <div style={{ color: 'var(--gray-500)', fontSize: 13.5, padding: '12px 0' }}>Cargando empleados…</div>
+            <div style={{ color: 'var(--gray-500)', fontSize: 14, padding: '12px 0' }}>Cargando empleados…</div>
           ) : employees.length === 0 ? (
             <div style={{
               background: 'var(--amber-bg)', border: '1px solid var(--amber-ring)',
-              borderRadius: 'var(--radius)', padding: '12px 14px', fontSize: 13, color: 'var(--amber)',
+              borderRadius: 'var(--radius)', padding: '14px 16px', fontSize: 14, color: 'var(--amber)',
             }}>
-              No hay empleados registrados. Agrega empleados en el módulo de Pagos.
+              No hay empleados registrados. Avise al administrador.
             </div>
           ) : isFabricacion ? (
             <FabricacionList
@@ -119,23 +123,47 @@ export default function StageDialog ({ ticket, step, onConfirmed, onClose }: Pro
           {error && (
             <div style={{
               marginTop: 14, background: 'var(--red-50)', border: '1px solid var(--red-ring)',
-              borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--red)',
+              borderRadius: 'var(--radius)', padding: '12px 14px', fontSize: 14, color: 'var(--red)', fontWeight: 600,
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              <AlertCircle size={14} /> {error}
+              <AlertCircle size={15} style={{ flexShrink: 0 }} /> {error}
             </div>
           )}
         </div>
       </div>
 
-      <Toast open={toast} tone='success' message='Etapa completada' onClose={() => setToast(false)} durationMs={700} />
+      <Toast open={toast} tone='success' message='Etapa completada' onClose={() => setToast(false)} durationMs={800} />
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────
+// Botón grande con el nombre de un empleado
+// ─────────────────────────────────────────────────────────
+function EmployeeButton ({ name, selected, onClick }: { name: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      type='button'
+      onClick={onClick}
+      style={{
+        padding: '14px 18px', fontSize: 15, fontWeight: 600,
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        color: selected ? '#fff' : 'var(--gray-800)',
+        background: selected ? 'var(--red)' : 'var(--bg-card)',
+        border: `2px solid ${selected ? 'var(--red)' : 'var(--border)'}`,
+        borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+        transition: 'all var(--t-fast)',
+      }}
+    >
+      {selected && <CheckCircle size={16} />}
+      {name}
+    </button>
+  )
+}
+
+// ─────────────────────────────────────────────────────────
 // Etapas simples (soldadura, ferré, pintura, decoración):
-// un empleado para todas las piezas pendientes.
+// tocar el nombre del empleado → confirmar todas las piezas.
 // ─────────────────────────────────────────────────────────
 function SimpleStage ({
   step, pendingPieces, employees, ticketId, pending, startTransition, onConfirmedBatch, onError,
@@ -164,7 +192,7 @@ function SimpleStage ({
           employee_id: emp.id,
           employee_name: emp.name,
         })
-        if (!res.ok) { onError(res.error ?? 'Error'); return }
+        if (!res.ok) { onError(friendlyError(res.error)); return }
       }
       await onConfirmedBatch()
     })
@@ -172,25 +200,30 @@ function SimpleStage ({
 
   return (
     <div>
-      <label className='form-label'>
-        <User size={11} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-        Empleado<span className='req'>*</span>
-      </label>
-      <select className='input-base' value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
-        <option value=''>Selecciona un empleado…</option>
-        {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-      </select>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--gray-900)', marginBottom: 12 }}>
+        ¿Quién hizo este trabajo?
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {employees.map(e => (
+          <EmployeeButton
+            key={e.id}
+            name={e.name}
+            selected={employeeId === e.id}
+            onClick={() => { setEmployeeId(e.id); onError('') }}
+          />
+        ))}
+      </div>
 
-      <div style={{ marginTop: 18 }}>
-        <div className='eyebrow' style={{ marginBottom: 10 }}>Piezas a confirmar</div>
+      {/* Piezas que se van a confirmar */}
+      <div style={{ marginTop: 20, padding: '14px 16px', background: 'var(--bg-page)', borderRadius: 'var(--radius-lg)' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+          Se confirmarán estas piezas
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {pendingPieces.map(p => (
-            <div key={p.id} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '10px 12px', background: 'var(--bg-page)', borderRadius: 'var(--radius)', fontSize: 13.5,
-            }}>
-              <span style={{ color: 'var(--gray-800)', fontWeight: 500 }}>{p.piece_name}</span>
-              <span style={{ color: 'var(--gray-500)', fontSize: 12.5 }}>×{p.quantity}</span>
+            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+              <span style={{ color: 'var(--gray-800)', fontWeight: 600 }}>{p.piece_name}</span>
+              <span style={{ color: 'var(--gray-500)' }}>×{p.quantity}</span>
             </div>
           ))}
         </div>
@@ -200,16 +233,16 @@ function SimpleStage ({
         onClick={handleConfirm}
         disabled={!employeeId || pendingPieces.length === 0 || pending}
         className='btn btn-primary'
-        style={{ width: '100%', marginTop: 20 }}
+        style={{ width: '100%', marginTop: 20, height: 54, fontSize: 16, fontWeight: 700 }}
       >
-        {pending ? <><Spinner /> Confirmando…</> : <>Confirmar {pendingPieces.length} pieza{pendingPieces.length !== 1 ? 's' : ''}</>}
+        {pending ? 'Guardando…' : `✓ Confirmar ${STEP_LABELS[step]}`}
       </button>
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────
-// Fabricación: por pieza (fabricador + doblador)
+// Fabricación: por pieza (fabricador + ¿dobló él mismo?)
 // ─────────────────────────────────────────────────────────
 function FabricacionList ({
   pendingPieces, employees, ticketId, pending, startTransition, onConfirmedPiece, onError,
@@ -235,11 +268,11 @@ function FabricacionList ({
   function handleConfirm (pieceName: string) {
     const st = state[pieceName]
     if (!st || !st.fab || st.self === null) return
-    if (!st.self && !st.doblador) { onError('Selecciona el doblador'); return }
+    if (!st.self && !st.doblador) { onError('Toca el nombre de quien dobló la pieza'); return }
     const fab = employees.find(e => e.id === st.fab)
     const doblador = !st.self ? employees.find(e => e.id === st.doblador) : null
     if (!fab) return
-    if (!st.self && !doblador) { onError('Doblador no válido'); return }
+    if (!st.self && !doblador) { onError('Toca el nombre de quien dobló la pieza'); return }
     startTransition(async () => {
       const res = await confirmStep({
         ticket_id: ticketId,
@@ -251,39 +284,60 @@ function FabricacionList ({
         doblador_id: doblador?.id ?? null,
         doblador_name: doblador?.name ?? null,
       })
-      if (!res.ok) { onError(res.error ?? 'Error'); return }
+      if (!res.ok) { onError(friendlyError(res.error)); return }
       setState(s => { const n = { ...s }; delete n[pieceName]; return n })
       await onConfirmedPiece()
     })
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {pendingPieces.map(p => {
         const st = state[p.piece_name] ?? { fab: '', self: null, doblador: '' }
         const canConfirm = st.fab && st.self !== null && (st.self || st.doblador)
         return (
           <div key={p.id} style={{
-            border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 16, background: 'var(--bg-card)',
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', padding: 18, background: 'var(--bg-card)',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-900)' }}>{p.piece_name}</span>
-              <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>×{p.quantity}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--gray-900)' }}>{p.piece_name}</span>
+              <span style={{ fontSize: 13, color: 'var(--gray-500)', fontWeight: 600 }}>×{p.quantity}</span>
             </div>
 
-            <label className='form-label' style={{ fontSize: 11 }}>Fabricador</label>
-            <select className='input-base' style={{ height: 40 }} value={st.fab} onChange={e => set(p.piece_name, { fab: e.target.value })}>
-              <option value=''>Selecciona…</option>
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-900)', marginBottom: 10 }}>
+              ¿Quién la fabricó?
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {employees.map(e => (
+                <EmployeeButton
+                  key={e.id}
+                  name={e.name}
+                  selected={st.fab === e.id}
+                  onClick={() => { set(p.piece_name, { fab: e.id }); onError('') }}
+                />
+              ))}
+            </div>
 
-            <label className='form-label' style={{ fontSize: 11, marginTop: 14 }}>¿El mismo fabricador dobló la pieza?</label>
-            <div className='segmented' style={{ width: '100%' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-900)', margin: '18px 0 10px' }}>
+              ¿Esa misma persona dobló la pieza?
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {(['Sí', 'No'] as const).map(opt => {
                 const val = opt === 'Sí'
+                const active = st.self === val
                 return (
-                  <button key={opt} type='button' onClick={() => set(p.piece_name, { self: val })}
-                    className={`segmented-item ${st.self === val ? 'active' : ''}`}>
+                  <button
+                    key={opt}
+                    type='button'
+                    onClick={() => { set(p.piece_name, { self: val }); onError('') }}
+                    style={{
+                      padding: '14px 10px', fontSize: 16, fontWeight: 700,
+                      color: active ? '#fff' : 'var(--gray-800)',
+                      background: active ? 'var(--red)' : 'var(--bg-card)',
+                      border: `2px solid ${active ? 'var(--red)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+                    }}
+                  >
                     {opt}
                   </button>
                 )
@@ -292,11 +346,19 @@ function FabricacionList ({
 
             {st.self === false && (
               <>
-                <label className='form-label' style={{ fontSize: 11, marginTop: 14 }}>Doblador</label>
-                <select className='input-base' style={{ height: 40 }} value={st.doblador} onChange={e => set(p.piece_name, { doblador: e.target.value })}>
-                  <option value=''>Selecciona…</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-900)', margin: '18px 0 10px' }}>
+                  ¿Quién la dobló?
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {employees.map(e => (
+                    <EmployeeButton
+                      key={e.id}
+                      name={e.name}
+                      selected={st.doblador === e.id}
+                      onClick={() => { set(p.piece_name, { doblador: e.id }); onError('') }}
+                    />
+                  ))}
+                </div>
               </>
             )}
 
@@ -304,23 +366,13 @@ function FabricacionList ({
               onClick={() => handleConfirm(p.piece_name)}
               disabled={!canConfirm || pending}
               className='btn btn-primary'
-              style={{ width: '100%', marginTop: 16, height: 40 }}
+              style={{ width: '100%', marginTop: 20, height: 50, fontSize: 15, fontWeight: 700 }}
             >
-              {pending ? <Spinner /> : <>Confirmar fabricación <ChevronRight size={14} /></>}
+              {pending ? 'Guardando…' : <>✓ Confirmar fabricación <ChevronRight size={15} /></>}
             </button>
           </div>
         )
       })}
     </div>
-  )
-}
-
-function Spinner () {
-  return (
-    <div style={{
-      width: 14, height: 14,
-      border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff',
-      borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block',
-    }} />
   )
 }

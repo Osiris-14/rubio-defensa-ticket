@@ -465,7 +465,7 @@ DECLARE
   v_total        NUMERIC(14,2);
   v_missing      INT;
 BEGIN
-  SELECT status INTO v_status FROM public.production_tickets WHERE id = p_ticket_id;
+  SELECT t.status INTO v_status FROM public.production_tickets t WHERE t.id = p_ticket_id;
   IF v_status IS NULL THEN
     RAISE EXCEPTION 'Ticket no encontrado';
   END IF;
@@ -473,7 +473,6 @@ BEGIN
     RAISE EXCEPTION 'El ticket ya está completado';
   END IF;
 
-  -- Validar que cada pieza tenga sus 5 etapas confirmadas
   SELECT COUNT(*) INTO v_missing
   FROM public.production_ticket_pieces p
   CROSS JOIN (VALUES ('fabricacion'),('soldadura'),('ferre'),('pintura'),('decoracion')) AS s(step)
@@ -489,15 +488,14 @@ BEGIN
     RAISE EXCEPTION 'Faltan % etapa(s) por confirmar antes de cerrar', v_missing;
   END IF;
 
-  -- Total = suma de todos los pasos (precio ya = unitario × cantidad)
   SELECT COALESCE(SUM(price), 0) INTO v_total
   FROM public.production_ticket_steps WHERE ticket_id = p_ticket_id;
 
-  UPDATE public.production_tickets
+  UPDATE public.production_tickets t
     SET status = 'completado',
         total_cost = v_total,
         completed_at = NOW()
-    WHERE id = p_ticket_id;
+    WHERE t.id = p_ticket_id;
 
   RETURN QUERY SELECT p_ticket_id, v_total, 'completado'::TEXT;
 END;

@@ -6,6 +6,7 @@ import {
   fetchActivePieceNames,
   type OrdenProduccion,
 } from '@/lib/production-v2'
+import { friendlyError } from '@/lib/errorMessages'
 import AbrirProduccionModal from './AbrirProduccionModal'
 
 interface Props {
@@ -32,7 +33,7 @@ export default function OrdenesTab ({ user, onChanged }: Props) {
         setPieceNames(p)
         setError('')
       } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : String(e))
+        if (active) setError(friendlyError(e))
       } finally {
         if (active) setLoading(false)
       }

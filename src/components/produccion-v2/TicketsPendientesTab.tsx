@@ -1,10 +1,15 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Loader2, ChevronRight, AlertCircle, Clock } from 'lucide-react'
+import { ChevronRight, AlertCircle, Calendar, Loader2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import {
   fetchProductionTickets,
+  PRODUCTION_STEPS,
+  STEP_LABELS,
   type ProductionTicket,
+  type ProductionStep,
 } from '@/lib/production-v2'
+import { friendlyError } from '@/lib/errorMessages'
 import TicketPasarela from './TicketPasarela'
 
 interface Props {
@@ -12,13 +17,19 @@ interface Props {
   onChanged: () => void
 }
 
+interface TicketProgress {
+  doneStages: number
+  currentLabel: string | null
+  totalPieces: number
+}
+
 export default function TicketsPendientesTab ({ user, onChanged }: Props) {
   const [tickets, setTickets] = useState<ProductionTicket[]>([])
+  const [progressMap, setProgressMap] = useState<Record<string, TicketProgress>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     let active = true
@@ -27,9 +38,60 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
         const t = await fetchProductionTickets('pendiente')
         if (!active) return
         setTickets(t)
+
+        // Progreso de cada ticket: etapas completadas de sus piezas
+        if (t.length > 0) {
+          const ids = t.map(x => x.id)
+          const [stepsRes, piecesRes] = await Promise.all([
+            supabase.from('production_ticket_steps').select('ticket_id, step, piece_name, completed_at').in('ticket_id', ids),
+            supabase.from('production_ticket_pieces').select('ticket_id, piece_name').in('ticket_id', ids),
+          ])
+          if (stepsRes.error) throw new Error(stepsRes.error.message)
+          if (piecesRes.error) throw new Error(piecesRes.error.message)
+          if (!active) return
+
+          const piecesCount = new Map<string, number>()
+          for (const p of piecesRes.data ?? []) {
+            piecesCount.set(p.ticket_id as string, (piecesCount.get(p.ticket_id as string) ?? 0) + 1)
+          }
+          // ticket → etapa → piezas que ya la completaron
+          const doneMap = new Map<string, Map<ProductionStep, Set<string>>>()
+          for (const s of stepsRes.data ?? []) {
+            if (!s.completed_at) continue
+            const tid = s.ticket_id as string
+            const st = s.step as ProductionStep
+            const stageMap = doneMap.get(tid) ?? new Map<ProductionStep, Set<string>>()
+            const pieceSet = stageMap.get(st) ?? new Set<string>()
+            pieceSet.add(s.piece_name as string)
+            stageMap.set(st, pieceSet)
+            doneMap.set(tid, stageMap)
+          }
+
+          const map: Record<string, TicketProgress> = {}
+          for (const ticket of t) {
+            const totalPieces = piecesCount.get(ticket.id) ?? 0
+            const stageMap = doneMap.get(ticket.id)
+            // Una etapa está lista solo cuando TODAS las piezas la completaron
+            const doneSet = new Set<ProductionStep>()
+            if (totalPieces > 0 && stageMap) {
+              for (const st of PRODUCTION_STEPS) {
+                if ((stageMap.get(st)?.size ?? 0) >= totalPieces) doneSet.add(st)
+              }
+            }
+            const next = PRODUCTION_STEPS.find(st => !doneSet.has(st)) ?? null
+            map[ticket.id] = {
+              doneStages: doneSet.size,
+              currentLabel: next ? STEP_LABELS[next] : null,
+              totalPieces,
+            }
+          }
+          setProgressMap(map)
+        } else {
+          setProgressMap({})
+        }
         setError('')
       } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : String(e))
+        if (active) setError(friendlyError(e))
       } finally {
         if (active) setLoading(false)
       }
@@ -37,11 +99,6 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
     load()
     return () => { active = false }
   }, [reloadKey])
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 60_000)
-    return () => clearInterval(id)
-  }, [])
 
   if (selectedId) {
     return (
@@ -53,13 +110,13 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
     )
   }
 
-  if (loading) return <LoadingState message='Cargando tickets pendientes…' />
+  if (loading) return <LoadingState message='Cargando tickets…' />
 
   if (error) {
     return (
       <div style={{
         background: 'var(--red-50)', border: '1px solid var(--red-ring)',
-        borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: 13.5, color: 'var(--red)',
+        borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: 14, color: 'var(--red)',
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
         <AlertCircle size={16} /> {error}
@@ -70,84 +127,108 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
   if (tickets.length === 0) {
     return (
       <EmptyState
-        title='No hay tickets pendientes'
-        description='Los tickets creados desde Órdenes aparecerán aquí con su pasarela de producción.'
+        title='No hay trabajos pendientes'
+        description='Cuando abras una orden en la pestaña Órdenes, el trabajo aparecerá aquí.'
       />
     )
   }
 
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16,
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16,
     }}>
       {tickets.map(t => (
-        <TicketCard key={t.id} ticket={t} now={now} onClick={() => setSelectedId(t.id)} />
+        <TicketCard
+          key={t.id}
+          ticket={t}
+          progress={progressMap[t.id]}
+          onClick={() => setSelectedId(t.id)}
+        />
       ))}
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────
-function TicketCard ({ ticket, now, onClick }: { ticket: ProductionTicket; now: number; onClick: () => void }) {
-  const ageH = (now - new Date(ticket.created_at).getTime()) / 3_600_000
-  const ageLabel = ageH < 1 ? 'hace minutos' : ageH < 24 ? `hace ${Math.round(ageH)}h` : `hace ${Math.round(ageH / 24)}d`
+// Tarjeta simple de ticket pendiente
+// ─────────────────────────────────────────────────────────
+function TicketCard ({ ticket, progress, onClick }: {
+  ticket: ProductionTicket
+  progress?: TicketProgress
+  onClick: () => void
+}) {
+  const done = progress?.doneStages ?? 0
 
   return (
-    <div onClick={onClick} className='card card-interactive' style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', cursor: 'pointer' }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 20px', borderBottom: '1px solid var(--border)', background: 'var(--bg-page)',
-      }}>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px',
-          background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 9999,
-          fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' as const,
+    <div className='card' style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ padding: '22px 22px 18px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* Vehículo en grande */}
+        <div style={{
+          fontSize: 24, fontWeight: 700, color: 'var(--gray-900)',
+          letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 4,
         }}>
-          <Loader2 size={11} /> En producción
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: 'var(--gray-500)', fontWeight: 500 }}>
-          <Clock size={11} /> {ageLabel}
-        </span>
-      </div>
+          {ticket.vehiculo ?? 'Sin vehículo'}
+        </div>
+        <div style={{ fontSize: 13.5, color: 'var(--gray-500)', marginBottom: 14 }}>
+          Orden #{ticket.orden ?? '—'} · {ticket.cliente ?? 'Cliente —'}
+        </div>
 
-      <div style={{ padding: '22px 22px 18px', flex: 1 }}>
-        <div style={{
-          fontSize: 26, fontWeight: 700, color: 'var(--gray-900)',
-          letterSpacing: '-0.03em', lineHeight: 1.1, marginBottom: 6, fontFeatureSettings: '"tnum" 1',
-        }}>
-          {ticket.orden ? `Orden #${ticket.orden}` : 'Ticket —'}
+        {/* Fecha programada */}
+        {ticket.fecha_programada && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+            padding: '4px 12px', background: 'var(--red-50)', color: 'var(--red)',
+            borderRadius: 9999, fontSize: 12.5, fontWeight: 700, marginBottom: 14,
+          }}>
+            <Calendar size={12} /> {formatDateFriendly(ticket.fecha_programada)}
+          </div>
+        )}
+
+        {/* Barra de progreso de 5 etapas */}
+        <div style={{ marginTop: 'auto' }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            {PRODUCTION_STEPS.map((st, i) => (
+              <div
+                key={st}
+                title={STEP_LABELS[st]}
+                style={{
+                  flex: 1, height: 8, borderRadius: 4,
+                  background: i < done ? 'var(--green)' : i === done ? 'var(--red)' : 'var(--gray-100)',
+                  transition: 'background 0.2s',
+                }}
+              />
+            ))}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--gray-600)', fontWeight: 600, marginBottom: 16 }}>
+            {progress?.currentLabel
+              ? <>Ahora toca: <span style={{ color: 'var(--red)' }}>{progress.currentLabel}</span></>
+              : <span style={{ color: 'var(--green)' }}>✓ Listo para cerrar</span>}
+          </div>
         </div>
-        <div style={{ fontSize: 14, color: 'var(--gray-600)', fontWeight: 500, marginBottom: 16 }}>
-          {ticket.vehiculo ?? '—'}
-        </div>
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: 8,
-          paddingTop: 16, borderTop: '1px solid var(--border)',
-        }}>
-          <CompactLine label='Factura' value={ticket.factura ?? '—'} />
-          <CompactLine label='Cliente' value={ticket.cliente ?? '—'} />
-        </div>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          paddingTop: 16, marginTop: 16, borderTop: '1px solid var(--border)',
-        }}>
-          <span style={{ fontSize: 11.5, color: 'var(--gray-500)', fontWeight: 500 }}>Ver pasarela</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--red)' }}>
-            Abrir <ChevronRight size={14} strokeWidth={2.25} />
-          </span>
-        </div>
+
+        <button
+          onClick={onClick}
+          className='btn btn-primary'
+          style={{ width: '100%', height: 48, fontSize: 15, fontWeight: 700 }}
+        >
+          Continuar <ChevronRight size={16} strokeWidth={2.25} />
+        </button>
       </div>
     </div>
   )
 }
 
-function CompactLine ({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-      <span style={{ fontSize: 11, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, flexShrink: 0 }}>{label}</span>
-      <span style={{ fontSize: 13, color: 'var(--gray-800)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 }}>{value}</span>
-    </div>
-  )
+function formatDateFriendly (iso: string): string {
+  const d = new Date(iso + 'T00:00:00')
+  if (isNaN(d.getTime())) return iso
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const target = new Date(d); target.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000)
+  const fecha = d.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'short' })
+  if (diffDays === 0) return `Hoy · ${fecha}`
+  if (diffDays === 1) return `Mañana · ${fecha}`
+  if (diffDays < 0) return `Atrasado · ${fecha}`
+  return fecha
 }
 
 function LoadingState ({ message }: { message: string }) {

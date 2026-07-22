@@ -5,6 +5,7 @@ import {
   fetchProductionKpis,
   type ProductionKpis,
 } from '@/lib/production-v2'
+import { friendlyError } from '@/lib/errorMessages'
 import OrdenesTab from './OrdenesTab'
 import TicketsPendientesTab from './TicketsPendientesTab'
 import TicketsCompletadosTab from './TicketsCompletadosTab'
@@ -32,7 +33,7 @@ export default function ProduccionView ({ user }: Props) {
         const k = await fetchProductionKpis()
         if (active) { setKpis(k); setError('') }
       } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : String(e))
+        if (active) setError(friendlyError(e))
       }
     }
     load()
