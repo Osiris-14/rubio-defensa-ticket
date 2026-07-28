@@ -38,6 +38,16 @@ export interface ProductionTicket {
   cliente: string | null
   vehiculo: string | null
   status: 'pendiente' | 'completado'
+  // ── Pasarela secuencial: Corte → Doblado → Armado → Soldadura ──
+  etapa_actual: EtapaActual
+  corte_hecho: boolean
+  corte_motivo: string | null
+  corte_persona: string | null
+  corte_fecha: string | null
+  doblado_hecho: boolean
+  doblado_motivo: string | null
+  doblado_persona: string | null
+  doblado_fecha: string | null
   total_cost: number
   tipo_trabajo: 'Fabricacion' | 'Reparacion' | 'Modificacion' | null
   grado_reparacion: 'Grado A' | 'Grado B' | 'Grado C' | null
@@ -80,6 +90,47 @@ export interface ProductionTicketStep {
 export interface ProductionTicketFull extends ProductionTicket {
   pieces: ProductionTicketPiece[]
   steps: ProductionTicketStep[]
+}
+
+// ─────────────────────────────────────────────────────────
+// Pasarela secuencial — Corte → Doblado → Armado → Soldadura
+//
+// Corte y Doblado son a nivel de ORDEN (columnas en production_tickets).
+// Armado y Soldadura son a nivel de PIEZA (production_ticket_pasarela).
+// ─────────────────────────────────────────────────────────
+
+export type EtapaPasarela = 'corte' | 'doblado' | 'armado' | 'soldadura'
+export type EtapaActual = EtapaPasarela | 'completado'
+
+// Etapas de orden (una persona por ticket) vs. de pieza (una por pieza).
+export type EtapaOrden = 'corte' | 'doblado'
+export type EtapaPieza = 'armado' | 'soldadura'
+
+export interface PersonalPasarela {
+  id: string
+  etapa: EtapaPasarela
+  nombre: string
+  activo: boolean
+  created_at: string
+}
+
+export interface TicketPasarelaPieza {
+  id: string
+  ticket_id: string
+  pieza: string
+  armado_hecho: boolean
+  armado_motivo: string | null
+  armado_persona: string | null
+  armado_fecha: string | null
+  soldadura_hecho: boolean
+  soldadura_motivo: string | null
+  soldadura_persona: string | null
+  soldadura_fecha: string | null
+  created_at: string
+}
+
+export interface TicketPasarelaFull extends ProductionTicket {
+  piezas: TicketPasarelaPieza[]
 }
 
 // Orden proveniente de Alegra (vista silver) aún no convertida en ticket.
@@ -235,6 +286,58 @@ export const STEP_LABELS: Record<ProductionStep, string> = {
   decoracion: 'Decoración',
 }
 
+// ─────────────────────────────────────────────────────────
+// Pasarela — orden fijo y secuencial de las 4 etapas
+// ─────────────────────────────────────────────────────────
+export const PASARELA_STAGES: EtapaPasarela[] = ['corte', 'doblado', 'armado', 'soldadura']
+
+// Etapas que se registran por pieza (las demás son por orden).
+export const ETAPAS_PIEZA: EtapaPieza[] = ['armado', 'soldadura']
+
+export const ETAPA_LABELS: Record<EtapaActual, string> = {
+  corte: 'Corte',
+  doblado: 'Doblado',
+  armado: 'Armado',
+  soldadura: 'Soldadura',
+  completado: 'Completado',
+}
+
+// Pregunta que se le hace al operario en cada etapa.
+export const ETAPA_PREGUNTA: Record<EtapaPasarela, string> = {
+  corte: '¿Cortó?',
+  doblado: '¿Dobló?',
+  armado: '¿Armó?',
+  soldadura: '¿Soldó?',
+}
+
+// Cómo se llama a quien hace cada etapa.
+export const ETAPA_PERSONA_LABEL: Record<EtapaPasarela, string> = {
+  corte: 'Cortador',
+  doblado: 'Doblador',
+  armado: 'Armador',
+  soldadura: 'Soldador',
+}
+
+export function isEtapaPieza (e: EtapaPasarela): e is EtapaPieza {
+  return e === 'armado' || e === 'soldadura'
+}
+
+// Índice de la etapa dentro de la secuencia. 'completado' va al final.
+export function etapaIndex (e: EtapaActual): number {
+  return e === 'completado' ? PASARELA_STAGES.length : PASARELA_STAGES.indexOf(e)
+}
+
+export type EtapaState = 'completada' | 'actual' | 'bloqueada'
+
+// Estado de cada etapa respecto a la etapa actual del ticket.
+export function etapaState (etapa: EtapaPasarela, actual: EtapaActual): EtapaState {
+  const i = PASARELA_STAGES.indexOf(etapa)
+  const cur = etapaIndex(actual)
+  if (i < cur) return 'completada'
+  if (i === cur) return 'actual'
+  return 'bloqueada'
+}
+
 export const PRIORIDAD_LABELS: Record<Prioridad, string> = {
   baja: 'Baja',
   normal: 'Normal',
@@ -376,6 +479,83 @@ export async function fetchProductionTicketFull (id: string): Promise<Production
   if (steps.error) throw new Error(steps.error.message)
 
   return { ...(ticket as ProductionTicket), pieces: (pieces.data ?? []) as ProductionTicketPiece[], steps: (steps.data ?? []) as ProductionTicketStep[] }
+}
+
+// ─────────────────────────────────────────────────────────
+// Lecturas — Pasarela
+// ─────────────────────────────────────────────────────────
+
+// Personal por etapa. Sin filtro devuelve también los desactivados
+// (la pantalla de Áreas los necesita para poder reactivarlos).
+export async function fetchPersonalPasarela (activeOnly = true): Promise<PersonalPasarela[]> {
+  let q = supabase.from('personal_pasarela').select('*')
+  if (activeOnly) q = q.eq('activo', true)
+  const { data, error } = await q.order('etapa').order('nombre')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as PersonalPasarela[]
+}
+
+export async function fetchPasarelaPiezas (ticketId: string): Promise<TicketPasarelaPieza[]> {
+  const { data, error } = await supabase
+    .from('production_ticket_pasarela')
+    .select('*')
+    .eq('ticket_id', ticketId)
+    .order('created_at')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as TicketPasarelaPieza[]
+}
+
+// Ticket + sus piezas de pasarela (lo que consume la vista de detalle).
+export async function fetchTicketPasarela (ticketId: string): Promise<TicketPasarelaFull | null> {
+  const { data: ticket, error } = await supabase
+    .from('production_tickets')
+    .select('*')
+    .eq('id', ticketId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!ticket) return null
+  const piezas = await fetchPasarelaPiezas(ticketId)
+  return { ...(ticket as ProductionTicket), piezas }
+}
+
+// Piezas de varios tickets a la vez (para las tarjetas de la lista).
+export async function fetchPasarelaPiezasFor (ticketIds: string[]): Promise<Map<string, TicketPasarelaPieza[]>> {
+  const map = new Map<string, TicketPasarelaPieza[]>()
+  if (ticketIds.length === 0) return map
+  const { data, error } = await supabase
+    .from('production_ticket_pasarela')
+    .select('*')
+    .in('ticket_id', ticketIds)
+    .order('created_at')
+  if (error) throw new Error(error.message)
+  for (const row of (data ?? []) as TicketPasarelaPieza[]) {
+    const arr = map.get(row.ticket_id) ?? []
+    arr.push(row)
+    map.set(row.ticket_id, arr)
+  }
+  return map
+}
+
+// ¿Están todas las piezas de esta etapa marcadas como hechas?
+export function etapaPiezasCompleta (piezas: TicketPasarelaPieza[], etapa: EtapaPieza): boolean {
+  if (piezas.length === 0) return false
+  return piezas.every(p => (etapa === 'armado' ? p.armado_hecho : p.soldadura_hecho))
+}
+
+export function piezaHecha (p: TicketPasarelaPieza, etapa: EtapaPieza): boolean {
+  return etapa === 'armado' ? p.armado_hecho : p.soldadura_hecho
+}
+
+export function piezaPersona (p: TicketPasarelaPieza, etapa: EtapaPieza): string | null {
+  return etapa === 'armado' ? p.armado_persona : p.soldadura_persona
+}
+
+export function piezaMotivo (p: TicketPasarelaPieza, etapa: EtapaPieza): string | null {
+  return etapa === 'armado' ? p.armado_motivo : p.soldadura_motivo
+}
+
+export function piezaFecha (p: TicketPasarelaPieza, etapa: EtapaPieza): string | null {
+  return etapa === 'armado' ? p.armado_fecha : p.soldadura_fecha
 }
 
 // ─────────────────────────────────────────────────────────

@@ -601,11 +601,27 @@ input[type="date"].input-base { color: var(--gray-700); }
 .bottom-nav    { display: none; }
 
 /* ─────────────────────────────────────────────────────────
+   Pasarela de producción: Corte → Doblado → Armado → Soldadura
+   ───────────────────────────────────────────────────────── */
+
+.pasarela-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─────────────────────────────────────────────────────────
    Mobile (≤768px)
    ───────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
   .sidebar-wrapper { display: none; }
+
+  /* Las 4 etapas no caben en fila en móvil: se parten en 2×2 y se
+     ocultan las flechas intermedias. */
+  .pasarela-strip { flex-wrap: wrap; }
+  .pasarela-strip > div { flex: 1 1 42% !important; }
+  .pasarela-strip svg.lucide-chevron-right { display: none; }
 
   .mobile-header {
     display: flex;

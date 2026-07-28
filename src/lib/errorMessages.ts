@@ -51,7 +51,7 @@ const RULES: { test: RegExp; message: string }[] = [
 ]
 
 // Mensajes que ya vienen en español claro desde la base de datos — se respetan.
-const KEEP_AS_IS = /^ya existe|^selecciona|^la capacidad|^falta|^complete|^el ticket/i
+const KEEP_AS_IS = /^ya existe|^selecciona|^la capacidad|^falta|^complete|^el ticket|^debe |^la etapa|^pieza no|^ticket no|^etapa inv/i
 
 /**
  * Convierte cualquier error técnico en un mensaje simple en español.

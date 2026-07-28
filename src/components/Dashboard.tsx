@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { AREA_THEME } from '@/lib/areaTheme'
 import {
   ArrowLeft, ArrowRight, RefreshCw, Calendar, ChartColumn as BarChart3,
-  LayoutDashboard, Plus, ListChecks, Settings, LogOut, ChevronLeft, ChevronRight, Bell, Wallet, CalendarDays, Gauge,
+  LayoutDashboard, Plus, ListChecks, Settings, LogOut, ChevronLeft, ChevronRight, Bell, Wallet, CalendarDays, Gauge, Users,
   type LucideIcon,
 } from 'lucide-react'
 import TicketRow from './TicketRow'
@@ -17,6 +17,7 @@ import FormMarquilla from './forms/FormMarquilla'
 import FormFerre from './forms/FormFerre'
 import TicketsList from './TicketsList'
 import ProduccionView from './produccion-v2/ProduccionView'
+import AreasView from './produccion-v2/AreasView'
 import PagosView from './pagos/PagosView'
 import CalendarioProduccionView from './calendario/CalendarioProduccionView'
 import DashboardCapacidadView from './calendario/DashboardCapacidadView'
@@ -24,7 +25,7 @@ import AdminHome from './dashboard/AdminHome'
 
 interface Props { user: AppUser; onLogout: () => void }
 
-type View = 'dashboard' | 'form' | 'tickets' | 'produccion' | 'pagos' | 'calendario' | 'capacidad'
+type View = 'dashboard' | 'form' | 'tickets' | 'produccion' | 'areas' | 'pagos' | 'calendario' | 'capacidad'
 
 const AREA_ROLES: UserRole[] = ['recepcion', 'produccion', 'pintura', 'instalacion', 'marquilla', 'ferre']
 const AREA_DESCRIPTIONS: Record<string, string> = {
@@ -56,6 +57,7 @@ function subscribeToInserts(roles: UserRole[], onInsert: () => void): () => void
 const VIEW_META: Record<View, { eyebrow: string; title: string; subtitle: string }> = {
   dashboard:  { eyebrow: 'Resumen',      title: 'Dashboard Operativo',     subtitle: 'Vista general de la operación.' },
   produccion: { eyebrow: 'Tickets',      title: 'Producción',             subtitle: 'Las facturas de Alegra aparecen aquí automáticamente.' },
+  areas:      { eyebrow: 'Operación',    title: 'Áreas',                  subtitle: 'Personal de Corte, Doblado, Armado y Soldadura.' },
   form:       { eyebrow: 'Crear',        title: 'Nuevo ticket',           subtitle: 'Crea un ticket manual para cualquier área.' },
   tickets:    { eyebrow: 'Tickets',      title: 'Todos los tickets',      subtitle: 'Historial completo de tickets en el sistema.' },
   pagos:      { eyebrow: 'Pagos',        title: 'Pagos y Nóminas',        subtitle: 'Cálculo automático desde los movimientos de producción.' },
@@ -74,6 +76,7 @@ export default function Dashboard({ user, onLogout }: Props) {
   const allNavItems: { id: View; label: string; icon: LucideIcon; group: 'main' | 'ops' | 'plan' }[] = [
     { id: 'dashboard',  label: 'Dashboard',  icon: LayoutDashboard, group: 'main' },
     { id: 'produccion', label: 'Producción', icon: Settings,       group: 'ops' },
+    { id: 'areas',      label: 'Áreas',      icon: Users,          group: 'ops' },
     { id: 'pagos',      label: 'Pagos',      icon: Wallet,         group: 'ops' },
     { id: 'calendario', label: 'Calendario', icon: CalendarDays,   group: 'plan' },
     { id: 'capacidad',  label: 'Capacidad',  icon: Gauge,          group: 'plan' },
@@ -87,8 +90,8 @@ export default function Dashboard({ user, onLogout }: Props) {
   // Pagos / Calendario / Capacidad son solo para admin (nóminas, planificación).
   const navItems = allNavItems.filter(i => {
     if (i.id === 'pagos' && user.role !== 'admin') return false
-    if ((i.id === 'calendario' || i.id === 'capacidad') && user.role !== 'admin' && user.role !== 'produccion') return false
-    if (user.role === 'produccion' && !(i.id === 'dashboard' || i.id === 'produccion' || i.id === 'calendario' || i.id === 'capacidad')) return false
+    if ((i.id === 'calendario' || i.id === 'capacidad' || i.id === 'areas') && user.role !== 'admin' && user.role !== 'produccion') return false
+    if (user.role === 'produccion' && !(i.id === 'dashboard' || i.id === 'produccion' || i.id === 'areas' || i.id === 'calendario' || i.id === 'capacidad')) return false
     return true
   })
 
@@ -280,7 +283,7 @@ export default function Dashboard({ user, onLogout }: Props) {
         background: 'var(--bg-page)',
       }}>
         {/* Header con breadcrumb — solo para vistas tradicionales; Producción, Pagos, Calendario y Capacidad lo gestionan internamente */}
-        {view !== 'produccion' && view !== 'pagos' && view !== 'calendario' && view !== 'capacidad' && (
+        {view !== 'produccion' && view !== 'areas' && view !== 'pagos' && view !== 'calendario' && view !== 'capacidad' && (
           <PageHeaderBar
             eyebrow={meta.eyebrow}
             title={meta.title}
@@ -300,6 +303,7 @@ export default function Dashboard({ user, onLogout }: Props) {
           )}
           {view === 'tickets' && <TicketsList user={user} />}
           {view === 'produccion' && <ProduccionView user={user} />}
+          {view === 'areas' && <AreasView user={user} />}
           {view === 'pagos' && <PagosView user={user} />}
           {view === 'calendario' && <CalendarioProduccionView user={user} />}
           {view === 'capacidad' && <DashboardCapacidadView user={user} />}
@@ -314,6 +318,7 @@ export default function Dashboard({ user, onLogout }: Props) {
               {item.id === 'dashboard' ? '⌂'
                 : item.id === 'form' ? '+'
                 : item.id === 'produccion' ? '⚙'
+                : item.id === 'areas' ? '☺'
                 : item.id === 'pagos' ? '¥'
                 : item.id === 'calendario' ? '▦'
                 : item.id === 'capacidad' ? '☰'
@@ -322,6 +327,7 @@ export default function Dashboard({ user, onLogout }: Props) {
             <span>{item.id === 'tickets' ? 'Tickets'
               : item.id === 'form' ? 'Nuevo'
               : item.id === 'produccion' ? 'Prod.'
+              : item.id === 'areas' ? 'Áreas'
               : item.id === 'pagos' ? 'Pagos'
               : item.id === 'calendario' ? 'Cal.'
               : item.id === 'capacidad' ? 'Cap.'

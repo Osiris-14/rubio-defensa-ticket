@@ -1,7 +1,9 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-server'
-import type { ProductionStep, Prioridad } from '@/lib/production-v2'
+import type {
+  ProductionStep, Prioridad, EtapaOrden, EtapaPieza, EtapaPasarela,
+} from '@/lib/production-v2'
 
 // =====================================================================
 // Server Actions — Módulo de Producción rediseñado.
@@ -148,6 +150,103 @@ export async function importCatalog (rows: Array<Record<string, unknown>>): Prom
   if (error) return { ok: false, error: error.message }
   const row = (Array.isArray(data) ? data[0] : data) as { inserted: number; updated: number }
   return { ok: true, data: row }
+}
+
+// =====================================================================
+// Pasarela secuencial — Corte → Doblado → Armado → Soldadura
+//
+// El orden y el bloqueo entre etapas los impone la base de datos
+// (las RPC rechazan escribir en una etapa que no es la actual), así que
+// el cliente nunca puede saltarse una etapa manipulando la petición.
+// =====================================================================
+
+// ── Corte / Doblado: una sola persona para toda la orden ──
+export async function setOrderStage (input: {
+  ticket_id: string
+  etapa: EtapaOrden
+  hecho: boolean
+  motivo?: string | null
+  persona?: string | null
+}): Promise<ActionResult<{ etapa_actual: string }>> {
+  if (input.hecho && !input.persona?.trim()) {
+    return { ok: false, error: 'Debe seleccionar quién lo hizo' }
+  }
+  if (!input.hecho && !input.motivo?.trim()) {
+    return { ok: false, error: 'Debe indicar el motivo' }
+  }
+  const { data, error } = await supabaseAdmin.rpc('pasarela_set_order_stage', {
+    p_ticket_id: input.ticket_id,
+    p_etapa: input.etapa,
+    p_hecho: input.hecho,
+    p_motivo: input.motivo ?? null,
+    p_persona: input.persona ?? null,
+  })
+  if (error) return { ok: false, error: error.message }
+  const row = (Array.isArray(data) ? data[0] : data) as { etapa_actual: string }
+  return { ok: true, data: row }
+}
+
+// ── Armado / Soldadura: una persona por pieza ──
+export async function setPieceStage (input: {
+  pieza_id: string
+  etapa: EtapaPieza
+  hecho: boolean
+  motivo?: string | null
+  persona?: string | null
+}): Promise<ActionResult<{ ticket_id: string; etapa_actual: string; status: string }>> {
+  if (input.hecho && !input.persona?.trim()) {
+    return { ok: false, error: 'Debe seleccionar quién lo hizo' }
+  }
+  if (!input.hecho && !input.motivo?.trim()) {
+    return { ok: false, error: 'Debe indicar el motivo' }
+  }
+  const { data, error } = await supabaseAdmin.rpc('pasarela_set_piece_stage', {
+    p_pieza_id: input.pieza_id,
+    p_etapa: input.etapa,
+    p_hecho: input.hecho,
+    p_motivo: input.motivo ?? null,
+    p_persona: input.persona ?? null,
+  })
+  if (error) return { ok: false, error: error.message }
+  const row = (Array.isArray(data) ? data[0] : data) as { ticket_id: string; etapa_actual: string; status: string }
+  return { ok: true, data: row }
+}
+
+// ── Personal de cada área de la pasarela ──
+export async function addPersonalPasarela (input: {
+  etapa: EtapaPasarela
+  nombre: string
+}): Promise<ActionResult<{ id: string }>> {
+  const clean = input.nombre.trim()
+  if (!clean) return { ok: false, error: 'Escriba el nombre de la persona' }
+  const { data, error } = await supabaseAdmin
+    .from('personal_pasarela')
+    .insert({ etapa: input.etapa, nombre: clean, activo: true })
+    .select('id')
+    .single()
+  if (error) {
+    if (error.code === '23505') return { ok: false, error: 'Ya existe esa persona en esta área' }
+    return { ok: false, error: error.message }
+  }
+  return { ok: true, data: { id: data.id } }
+}
+
+export async function togglePersonalPasarela (id: string, activo: boolean): Promise<ActionResult<null>> {
+  const { error } = await supabaseAdmin
+    .from('personal_pasarela')
+    .update({ activo })
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, data: null }
+}
+
+export async function deletePersonalPasarela (id: string): Promise<ActionResult<null>> {
+  const { error } = await supabaseAdmin
+    .from('personal_pasarela')
+    .delete()
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, data: null }
 }
 
 // =====================================================================

@@ -62,7 +62,8 @@ export default function ProduccionView ({ user }: Props) {
               Producción
             </h1>
             <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 8, lineHeight: 1.5, maxWidth: 620 }}>
-              Órdenes de Alegra → Tickets → Pasarela de fabricación. Los precios se toman automáticamente del tarifario.
+              Órdenes de Alegra → Tickets → Pasarela: Corte → Doblado → Armado → Soldadura.
+              Las <strong>Órdenes</strong> aún no se han dado de alta; <strong>En proceso</strong> son las que ya van por la pasarela.
             </p>
           </div>
 
@@ -70,7 +71,7 @@ export default function ProduccionView ({ user }: Props) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 28, paddingTop: 4 }}>
               <HeaderStat label='Órdenes' value={kpis.ordenes} />
               <Divider />
-              <HeaderStat label='Pendientes' value={kpis.tickets_pendientes} />
+              <HeaderStat label='En proceso' value={kpis.tickets_pendientes} />
               <Divider />
               <HeaderStat label='Completados' value={kpis.tickets_completados} />
             </div>
@@ -84,7 +85,7 @@ export default function ProduccionView ({ user }: Props) {
             {kpis && <TabCount count={kpis.ordenes} />}
           </TabButton>
           <TabButton active={tab === 'pendientes'} onClick={() => setTab('pendientes')}>
-            <Loader2 size={14} strokeWidth={1.75} /> Tickets Pendientes
+            <Loader2 size={14} strokeWidth={1.75} /> En proceso
             {kpis && <TabCount count={kpis.tickets_pendientes} tone={kpis.tickets_pendientes > 0 ? 'danger' : 'neutral'} />}
           </TabButton>
           <TabButton active={tab === 'completados'} onClick={() => setTab('completados')}>

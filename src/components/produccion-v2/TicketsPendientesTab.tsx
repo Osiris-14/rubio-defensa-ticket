@@ -4,10 +4,14 @@ import { ChevronRight, AlertCircle, Calendar, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   fetchProductionTickets,
-  PRODUCTION_STEPS,
-  STEP_LABELS,
+  fetchPasarelaPiezasFor,
+  etapaState,
+  etapaIndex,
+  piezaHecha,
+  PASARELA_STAGES,
+  ETAPA_LABELS,
   type ProductionTicket,
-  type ProductionStep,
+  type TicketPasarelaPieza,
 } from '@/lib/production-v2'
 import { friendlyError } from '@/lib/errorMessages'
 import TicketPasarela from './TicketPasarela'
@@ -17,15 +21,9 @@ interface Props {
   onChanged: () => void
 }
 
-interface TicketProgress {
-  doneStages: number
-  currentLabel: string | null
-  totalPieces: number
-}
-
 export default function TicketsPendientesTab ({ user, onChanged }: Props) {
   const [tickets, setTickets] = useState<ProductionTicket[]>([])
-  const [progressMap, setProgressMap] = useState<Record<string, TicketProgress>>({})
+  const [piezasMap, setPiezasMap] = useState<Map<string, TicketPasarelaPieza[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -38,57 +36,9 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
         const t = await fetchProductionTickets('pendiente')
         if (!active) return
         setTickets(t)
-
-        // Progreso de cada ticket: etapas completadas de sus piezas
-        if (t.length > 0) {
-          const ids = t.map(x => x.id)
-          const [stepsRes, piecesRes] = await Promise.all([
-            supabase.from('production_ticket_steps').select('ticket_id, step, piece_name, completed_at').in('ticket_id', ids),
-            supabase.from('production_ticket_pieces').select('ticket_id, piece_name').in('ticket_id', ids),
-          ])
-          if (stepsRes.error) throw new Error(stepsRes.error.message)
-          if (piecesRes.error) throw new Error(piecesRes.error.message)
-          if (!active) return
-
-          const piecesCount = new Map<string, number>()
-          for (const p of piecesRes.data ?? []) {
-            piecesCount.set(p.ticket_id as string, (piecesCount.get(p.ticket_id as string) ?? 0) + 1)
-          }
-          // ticket → etapa → piezas que ya la completaron
-          const doneMap = new Map<string, Map<ProductionStep, Set<string>>>()
-          for (const s of stepsRes.data ?? []) {
-            if (!s.completed_at) continue
-            const tid = s.ticket_id as string
-            const st = s.step as ProductionStep
-            const stageMap = doneMap.get(tid) ?? new Map<ProductionStep, Set<string>>()
-            const pieceSet = stageMap.get(st) ?? new Set<string>()
-            pieceSet.add(s.piece_name as string)
-            stageMap.set(st, pieceSet)
-            doneMap.set(tid, stageMap)
-          }
-
-          const map: Record<string, TicketProgress> = {}
-          for (const ticket of t) {
-            const totalPieces = piecesCount.get(ticket.id) ?? 0
-            const stageMap = doneMap.get(ticket.id)
-            // Una etapa está lista solo cuando TODAS las piezas la completaron
-            const doneSet = new Set<ProductionStep>()
-            if (totalPieces > 0 && stageMap) {
-              for (const st of PRODUCTION_STEPS) {
-                if ((stageMap.get(st)?.size ?? 0) >= totalPieces) doneSet.add(st)
-              }
-            }
-            const next = PRODUCTION_STEPS.find(st => !doneSet.has(st)) ?? null
-            map[ticket.id] = {
-              doneStages: doneSet.size,
-              currentLabel: next ? STEP_LABELS[next] : null,
-              totalPieces,
-            }
-          }
-          setProgressMap(map)
-        } else {
-          setProgressMap({})
-        }
+        const map = await fetchPasarelaPiezasFor(t.map(x => x.id))
+        if (!active) return
+        setPiezasMap(map)
         setError('')
       } catch (e) {
         if (active) setError(friendlyError(e))
@@ -99,6 +49,19 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
     load()
     return () => { active = false }
   }, [reloadKey])
+
+  // Realtime: los cambios de etapa se reflejan en vivo en la lista.
+  useEffect(() => {
+    const channel = supabase.channel(`pendientes-${Math.random().toString(36).slice(2)}`)
+    channel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'production_tickets' },
+      () => setReloadKey(k => k + 1))
+    channel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'production_ticket_pasarela' },
+      () => setReloadKey(k => k + 1))
+    channel.subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   if (selectedId) {
     return (
@@ -127,8 +90,8 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
   if (tickets.length === 0) {
     return (
       <EmptyState
-        title='No hay trabajos pendientes'
-        description='Cuando abras una orden en la pestaña Órdenes, el trabajo aparecerá aquí.'
+        title='No hay trabajos en proceso'
+        description='Cuando abras una orden en la pestaña Órdenes, el trabajo aparecerá aquí en la etapa de Corte.'
       />
     )
   }
@@ -141,7 +104,7 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
         <TicketCard
           key={t.id}
           ticket={t}
-          progress={progressMap[t.id]}
+          piezas={piezasMap.get(t.id) ?? []}
           onClick={() => setSelectedId(t.id)}
         />
       ))}
@@ -150,19 +113,38 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
 }
 
 // ─────────────────────────────────────────────────────────
-// Tarjeta simple de ticket pendiente
+// Tarjeta de ticket en proceso, con su etapa actual
 // ─────────────────────────────────────────────────────────
-function TicketCard ({ ticket, progress, onClick }: {
+function TicketCard ({ ticket, piezas, onClick }: {
   ticket: ProductionTicket
-  progress?: TicketProgress
+  piezas: TicketPasarelaPieza[]
   onClick: () => void
 }) {
-  const done = progress?.doneStages ?? 0
+  const actual = ticket.etapa_actual
+  const done = etapaIndex(actual)
+
+  // En Armado/Soldadura mostramos además cuántas piezas van.
+  let detalle = ''
+  if ((actual === 'armado' || actual === 'soldadura') && piezas.length > 0) {
+    const listas = piezas.filter(p => piezaHecha(p, actual)).length
+    detalle = ` · ${listas} de ${piezas.length} piezas`
+  }
 
   return (
     <div className='card' style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ padding: '22px 22px 18px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Vehículo en grande */}
+        {/* Badge de etapa actual */}
+        <div style={{ marginBottom: 10 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 12px', background: 'var(--red-50)', color: 'var(--red)',
+            borderRadius: 9999, fontSize: 12, fontWeight: 700,
+            textTransform: 'uppercase' as const, letterSpacing: '0.05em',
+          }}>
+            En {ETAPA_LABELS[actual]}
+          </span>
+        </div>
+
         <div style={{
           fontSize: 24, fontWeight: 700, color: 'var(--gray-900)',
           letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 4,
@@ -173,36 +155,37 @@ function TicketCard ({ ticket, progress, onClick }: {
           Orden #{ticket.orden ?? '—'} · {ticket.cliente ?? 'Cliente —'}
         </div>
 
-        {/* Fecha programada */}
         {ticket.fecha_programada && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
-            padding: '4px 12px', background: 'var(--red-50)', color: 'var(--red)',
+            padding: '4px 12px', background: 'var(--gray-100)', color: 'var(--gray-600)',
             borderRadius: 9999, fontSize: 12.5, fontWeight: 700, marginBottom: 14,
           }}>
             <Calendar size={12} /> {formatDateFriendly(ticket.fecha_programada)}
           </div>
         )}
 
-        {/* Barra de progreso de 5 etapas */}
+        {/* Barra de las 4 etapas */}
         <div style={{ marginTop: 'auto' }}>
           <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-            {PRODUCTION_STEPS.map((st, i) => (
-              <div
-                key={st}
-                title={STEP_LABELS[st]}
-                style={{
-                  flex: 1, height: 8, borderRadius: 4,
-                  background: i < done ? 'var(--green)' : i === done ? 'var(--red)' : 'var(--gray-100)',
-                  transition: 'background 0.2s',
-                }}
-              />
-            ))}
+            {PASARELA_STAGES.map(etapa => {
+              const st = etapaState(etapa, actual)
+              return (
+                <div
+                  key={etapa}
+                  title={ETAPA_LABELS[etapa]}
+                  style={{
+                    flex: 1, height: 8, borderRadius: 4,
+                    background: st === 'completada' ? 'var(--green)' : st === 'actual' ? 'var(--red)' : 'var(--gray-100)',
+                    transition: 'background 0.2s',
+                  }}
+                />
+              )
+            })}
           </div>
           <div style={{ fontSize: 13, color: 'var(--gray-600)', fontWeight: 600, marginBottom: 16 }}>
-            {progress?.currentLabel
-              ? <>Ahora toca: <span style={{ color: 'var(--red)' }}>{progress.currentLabel}</span></>
-              : <span style={{ color: 'var(--green)' }}>✓ Listo para cerrar</span>}
+            {done} de {PASARELA_STAGES.length} etapas
+            <span style={{ color: 'var(--gray-500)', fontWeight: 500 }}>{detalle}</span>
           </div>
         </div>
 
