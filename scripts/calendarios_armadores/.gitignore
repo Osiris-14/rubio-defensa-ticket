@@ -1,0 +1,4 @@
+# Credenciales de Google Calendar (no se suben)
+token.json
+client_secret*.json
+credentials.json

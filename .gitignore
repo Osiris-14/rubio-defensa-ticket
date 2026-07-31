@@ -33,6 +33,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# google calendar credentials (scripts/calendarios_armadores)
+scripts/calendarios_armadores/token.json
+scripts/calendarios_armadores/client_secret*.json
+scripts/calendarios_armadores/credentials.json
+
 # vercel
 .vercel
 
