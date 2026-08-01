@@ -632,6 +632,29 @@ input[type="date"].input-base { color: var(--gray-700); }
 }
 
 /* ─────────────────────────────────────────────────────────
+   Tablero de etapas: Corte · Doblado · Fabricación
+   Desktop: 3 columnas (Fabricación más ancha por sus puestos).
+   Móvil: columnas apiladas y plegables desde su cabecera.
+   ───────────────────────────────────────────────────────── */
+
+.etapas-board {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.45fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .etapas-board { grid-template-columns: 1fr 1fr; }
+  .etapas-board .etapa-col--fabricacion { grid-column: 1 / -1; }
+}
+
+@media (max-width: 768px) {
+  .etapas-board { grid-template-columns: 1fr; }
+  .etapas-board .etapa-col--fabricacion { grid-column: auto; }
+}
+
+/* ─────────────────────────────────────────────────────────
    Mobile (≤768px)
    ───────────────────────────────────────────────────────── */
 

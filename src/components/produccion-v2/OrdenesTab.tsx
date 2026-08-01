@@ -1,10 +1,12 @@
 'use client'
-import { useState, useEffect } from 'react'
-import {
-  Inbox, ArrowRight, Clock, AlertCircle, CalendarPlus, Save, X, Check, Link2, Unlink,
-} from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Inbox, ArrowRight, Clock, AlertCircle, Check, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { fetchActivePieceNames } from '@/lib/production-v2'
+import {
+  fetchActivePieceNames,
+  fetchMovimientos,
+  insertMovimiento,
+} from '@/lib/production-v2'
 import {
   fetchOrdenesDesde28,
   fetchOrdenesMapa,
@@ -12,36 +14,33 @@ import {
   fetchEventosArmador,
   fechaCompromisoDesdeDia,
   primerDiaMesISO,
-  labelArmador,
-  formatoCorto,
   type OrdenAlegra,
   type EventoArmador,
 } from '@/lib/ordenes'
 import { friendlyError } from '@/lib/errorMessages'
-import { guardarFechaCompromiso } from '@/app/actions/ordenes'
 import AbrirProduccionModal from './AbrirProduccionModal'
+import EtapasBoard from './EtapasBoard'
+import { buildEtapasModel, type TarjetaOrden } from './etapas'
 
 interface Props {
   user: { id: string; name: string; role: string }
   onChanged: () => void
-  filterOrden?: string
-  filterEstado?: 'todos' | 'atrasados' | 'al_dia'
 }
 
-export default function OrdenesTab ({ user, onChanged, filterOrden = '', filterEstado = 'todos' }: Props) {
+export default function OrdenesTab ({ user, onChanged }: Props) {
   const [ordenes, setOrdenes] = useState<OrdenAlegra[]>([])
   const [eventos, setEventos] = useState<EventoArmador[]>([])
   const [ordenesMap, setOrdenesMap] = useState<Map<string, OrdenAlegra>>(new Map())
   const [compromisos, setCompromisos] = useState<Map<string, string>>(new Map())
+  const [confirmadas, setConfirmadas] = useState<Set<string>>(new Set())
+  const [confirmando, setConfirmando] = useState<string | null>(null)
   const [ticketedIds, setTicketedIds] = useState<Set<string>>(new Set())
   const [ticketedFacturas, setTicketedFacturas] = useState<Set<string>>(new Set())
   const [pieceNames, setPieceNames] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<OrdenAlegra | null>(null)
-  const [editing, setEditing] = useState<{ orden: string; fecha: string } | null>(null)
-  const [guardando, setGuardando] = useState(false)
-  const [errorGuardar, setErrorGuardar] = useState('')
+  const [busqueda, setBusqueda] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const [hoy, setHoy] = useState(() => new Date())
@@ -51,7 +50,7 @@ export default function OrdenesTab ({ user, onChanged, filterOrden = '', filterE
     async function load () {
       try {
         const today = new Date()
-        const [o, mapa, comp, evs, pieces, prodIds, legacy] = await Promise.all([
+        const [o, mapa, comp, evs, pieces, prodIds, legacy, movs] = await Promise.all([
           fetchOrdenesDesde28(today),
           fetchOrdenesMapa(),
           fetchCompromisos(),
@@ -59,6 +58,7 @@ export default function OrdenesTab ({ user, onChanged, filterOrden = '', filterE
           fetchActivePieceNames(),
           supabase.from('production_tickets').select('alegra_id'),
           supabase.from('tickets_produccion').select('numero_factura'),
+          fetchMovimientos(500).catch(() => []),
         ])
         if (!active) return
         const ids = new Set<string>((prodIds.data ?? []).map(r => String(r.alegra_id)).filter(Boolean))
@@ -67,6 +67,7 @@ export default function OrdenesTab ({ user, onChanged, filterOrden = '', filterE
         setOrdenesMap(mapa)
         setCompromisos(comp)
         setEventos(evs.filter(e => eventoEnVentana(e, today)).sort((a, b) => compararEventos(a, b, today)))
+        setConfirmadas(new Set(movs.filter(m => m.tipo === 'SALIDA' && m.confirmada).map(m => m.numero_orden)))
         setTicketedIds(ids)
         setTicketedFacturas(facturas)
         setPieceNames(pieces)
@@ -87,6 +88,11 @@ export default function OrdenesTab ({ user, onChanged, filterOrden = '', filterE
     return () => clearInterval(id)
   }, [])
 
+  const modelo = useMemo(
+    () => buildEtapasModel({ eventos, ordenesMap, compromisos, hoy, confirmadas, filtro: busqueda }),
+    [eventos, ordenesMap, compromisos, hoy, confirmadas, busqueda],
+  )
+
   function reload () { setReloadKey(k => k + 1) }
 
   function handleSaved () {
@@ -95,41 +101,44 @@ export default function OrdenesTab ({ user, onChanged, filterOrden = '', filterE
     onChanged()
   }
 
-  async function handleGuardarCompromiso () {
-    if (!editing || !editing.fecha) { setErrorGuardar('Selecciona una fecha'); return }
-    setGuardando(true)
-    setErrorGuardar('')
-    const res = await guardarFechaCompromiso({ orden: editing.orden, fecha: editing.fecha, created_by: user.name })
-    setGuardando(false)
-    if (!res.ok) { setErrorGuardar(res.error ?? 'No se pudo guardar'); return }
-    setCompromisos(prev => new Map(prev).set(editing.orden, res.data!.fecha))
-    setEditing(null)
+  // Registra la salida en el mismo registro de movimientos que ya alimenta la
+  // hoja de movimientos (orden_movimientos, tipo SALIDA + confirmada).
+  async function handleConfirmarSalida (t: TarjetaOrden) {
+    setConfirmando(t.orden)
+    try {
+      await insertMovimiento({
+        numero_orden: t.orden,
+        calendar_event_id: null,
+        calendar_name: null,
+        pieza: t.pieza || null,
+        vehiculo: t.vehiculo,
+        cliente: t.cliente,
+        desde_puesto: t.puesto,
+        hacia_puesto: t.puesto,
+        tipo: 'SALIDA',
+        detalle: `Salida confirmada por ${user.name}`,
+        dias_estancada: t.dias,
+        confirmada: true,
+      })
+      setConfirmadas(prev => new Set(prev).add(t.orden))
+      setError('')
+    } catch (e) {
+      setError(friendlyError(e))
+    } finally {
+      setConfirmando(null)
+    }
   }
 
   if (loading) return <LoadingState message='Cargando órdenes…' />
 
   const fecha28 = `28/${String(hoy.getMonth() + 1).padStart(2, '0')}`
 
-  // Filtros compartidos con la vista Agenda
-  const hoyISO = hoy.toISOString().slice(0, 10)
-  const ordenFiltro = filterOrden.trim().toLowerCase()
-  const eventoAtrasado = (ev: EventoArmador) => {
-    const c = eventoCompromiso(ev, hoy)
-    return c !== null && c < hoyISO
-  }
-  const eventosFiltrados = eventos.filter(ev => {
-    if (ordenFiltro && !ev.orden.toLowerCase().includes(ordenFiltro)) return false
-    if (filterEstado === 'atrasados' && !eventoAtrasado(ev)) return false
-    if (filterEstado === 'al_dia' && eventoAtrasado(ev)) return false
-    return true
-  })
+  const ordenFiltro = busqueda.trim().toLowerCase()
   const ordenesFiltradas = ordenes.filter(o => {
     if (ordenFiltro && !(o.talonario ?? '').toLowerCase().includes(ordenFiltro) && !o.factura.toLowerCase().includes(ordenFiltro)) return false
-    if (filterEstado === 'atrasados' && o.estado_cxc !== 'Atraso') return false
-    if (filterEstado === 'al_dia' && o.estado_cxc === 'Atraso') return false
     return true
   })
-  const hayFiltros = ordenFiltro !== '' || filterEstado !== 'todos'
+  const hayFiltros = ordenFiltro !== ''
 
   return (
     <>
@@ -143,59 +152,20 @@ export default function OrdenesTab ({ user, onChanged, filterOrden = '', filterE
         </div>
       )}
 
-      <SectionHeader
-        title='Proceso de armado'
-        subtitle='Filas del calendario de los armadores (armado programado del mes en curso en adelante), enlazadas por número de ORDEN con las órdenes. La fecha de compromiso se agrega sola cuando el calendario trae el día.'
-        badge={eventosFiltrados.length > 0 ? String(eventosFiltrados.length) : undefined}
+      <BarraSuperior
+        totalOrdenes={modelo.totalOrdenes}
+        totalAlertas={modelo.totalAlertas}
+        busqueda={busqueda}
+        onBusqueda={setBusqueda}
       />
 
-      {eventosFiltrados.length === 0 ? (
-        <EmptyState
-          icon={CalendarPlus}
-          title={hayFiltros ? 'Sin coincidencias' : 'No hay armado programado'}
-          description={hayFiltros
-            ? 'Ninguna fila del calendario coincide con los filtros aplicados.'
-            : 'Cuando los armadores agenden piezas en sus calendarios, aparecerán aquí como filas con su fecha de compromiso.'}
-        />
-      ) : (
-        <div className='card' style={{ overflow: 'hidden', marginBottom: 40 }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
-              <thead>
-                <tr>
-                  <TH>Orden</TH>
-                  <TH>Pieza</TH>
-                  <TH>Armador</TH>
-                  <TH>Vehículo</TH>
-                  <TH>Fecha de compromiso</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {eventosFiltrados.map(ev => (
-                  <ArmadoRow
-                    key={ev.id}
-                    ev={ev}
-                    hoy={hoy}
-                    ordenesMap={ordenesMap}
-                    compromisos={compromisos}
-                    editing={editing}
-                    guardando={guardando}
-                    errorGuardar={errorGuardar}
-                    onEditar={() => {
-                      const actual = compromisos.get(ev.orden) ?? ''
-                      setEditing({ orden: ev.orden, fecha: actual })
-                      setErrorGuardar('')
-                    }}
-                    onCancelarEdicion={() => { setEditing(null); setErrorGuardar('') }}
-                    onFechaChange={f => setEditing(prev => prev ? { ...prev, fecha: f } : prev)}
-                    onGuardar={handleGuardarCompromiso}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <EtapasBoard
+        columnas={modelo.columnas}
+        confirmando={confirmando}
+        onConfirmar={handleConfirmarSalida}
+      />
+
+      <div style={{ height: 40 }} />
 
       <SectionHeader
         title='Órdenes'
@@ -258,131 +228,52 @@ function compararEventos (a: EventoArmador, b: EventoArmador, hoy: Date): number
 }
 
 // ─────────────────────────────────────────────────────────
-function ArmadoRow ({ ev, hoy, ordenesMap, compromisos, editing, guardando, errorGuardar, onEditar, onCancelarEdicion, onFechaChange, onGuardar }: {
-  ev: EventoArmador
-  hoy: Date
-  ordenesMap: Map<string, OrdenAlegra>
-  compromisos: Map<string, string>
-  editing: { orden: string; fecha: string } | null
-  guardando: boolean
-  errorGuardar: string
-  onEditar: () => void
-  onCancelarEdicion: () => void
-  onFechaChange: (fecha: string) => void
-  onGuardar: () => void
+function BarraSuperior ({ totalOrdenes, totalAlertas, busqueda, onBusqueda }: {
+  totalOrdenes: number
+  totalAlertas: number
+  busqueda: string
+  onBusqueda: (v: string) => void
 }) {
-  const orden = ordenesMap.get(ev.orden)
-  const compCal = eventoCompromiso(ev, hoy)
-  const compManual = compCal == null ? (compromisos.get(ev.orden) ?? null) : null
-  const visible = compCal ?? compManual
-  const esEdicion = editing?.orden === ev.orden
-
   return (
-    <tr style={{ borderTop: '1px solid var(--border)' }}>
-      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--gray-900)', fontFeatureSettings: '"tnum" 1' }}>
-          #{ev.orden}
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>
-          {ev.dia != null ? `Día ${ev.dia}` : 'Sin día'}
-        </div>
-      </td>
-      <td style={{ padding: '12px 16px', verticalAlign: 'middle', color: 'var(--gray-700)', fontWeight: 500 }}>
-        {ev.pieza}
-      </td>
-      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
-        <span style={{
-          fontSize: 11.5, fontWeight: 600, color: 'var(--gray-600)',
-          background: 'var(--gray-100)', border: '1px solid var(--border)',
-          padding: '3px 10px', borderRadius: 9999, whiteSpace: 'nowrap' as const,
-        }}>
-          {labelArmador(ev.calendario)}
-        </span>
-      </td>
-      <td style={{ padding: '12px 16px', verticalAlign: 'middle', minWidth: 180 }}>
-        {orden ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Link2 size={13} style={{ color: 'var(--green)', flexShrink: 0 }} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ color: 'var(--gray-800)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-                {orden.vehiculo ?? '—'}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--gray-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-                {orden.cliente ?? ''}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--gray-400)' }}>
-            <Unlink size={13} style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: 12 }}>Sin vínculo</span>
-          </div>
-        )}
-      </td>
-      <td style={{ padding: '12px 16px', verticalAlign: 'middle', minWidth: 170 }}>
-        {esEdicion ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <input
-              type='date'
-              value={editing.fecha}
-              onChange={e => onFechaChange(e.target.value)}
-              style={{
-                height: 32, fontSize: 13, padding: '0 8px', border: '1px solid var(--border)',
-                borderRadius: 8, color: 'var(--gray-800)', background: '#fff',
-              }}
-            />
-            {errorGuardar && <span style={{ fontSize: 11.5, color: 'var(--red)' }}>{errorGuardar}</span>}
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button className='btn btn-primary' onClick={onGuardar} disabled={guardando} style={{ height: 28, fontSize: 12, padding: '0 10px' }}>
-                {guardando ? 'Guardando…' : 'Guardar'} <Save size={12} />
-              </button>
-              <button className='btn' onClick={onCancelarEdicion} disabled={guardando} style={{ height: 28, fontSize: 12, padding: '0 10px' }}>
-                <X size={12} />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {visible ? (
-              <>
-                <span style={{
-                  fontSize: 14, fontWeight: 700, color: 'var(--gray-900)', fontFeatureSettings: '"tnum" 1',
-                }}>
-                  {formatoCorto(visible)}
-                </span>
-                <span style={{
-                  fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.04em',
-                  color: compCal != null ? 'var(--green)' : 'var(--blue)',
-                  background: compCal != null ? 'var(--green-50, #eafaf1)' : 'var(--blue-bg)',
-                  border: '1px solid var(--border)', padding: '1px 7px', borderRadius: 9999,
-                }}>
-                  {compCal != null ? 'Calendario' : 'Manual'}
-                </span>
-              </>
-            ) : (
-              <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>—</span>
-            )}
-            {compCal == null && (
-              <button className='btn' onClick={onEditar} style={{ height: 26, fontSize: 11.5, padding: '0 9px', marginLeft: 'auto' }}>
-                <CalendarPlus size={12} /> {compManual ? 'Editar' : 'Agregar'}
-              </button>
-            )}
-          </div>
-        )}
-      </td>
-    </tr>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      marginBottom: 14, flexWrap: 'wrap',
+    }}>
+      <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--gray-900)', letterSpacing: '-0.01em' }}>
+        Producción
+      </span>
+
+      <Pill>{totalOrdenes} {totalOrdenes === 1 ? 'orden' : 'órdenes'}</Pill>
+      {totalAlertas > 0 && (
+        <Pill tone='danger'>⚠ {totalAlertas} sin confirmar +2d</Pill>
+      )}
+
+      <div style={{ position: 'relative', marginLeft: 'auto' }}>
+        <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)' }} />
+        <input
+          className='input-base'
+          style={{ height: 32, paddingLeft: 30, width: 150, fontSize: 12.5 }}
+          placeholder='Buscar orden…'
+          value={busqueda}
+          onChange={e => onBusqueda(e.target.value)}
+        />
+      </div>
+    </div>
   )
 }
 
-function TH ({ children }: { children: React.ReactNode }) {
+function Pill ({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'danger' }) {
+  const danger = tone === 'danger'
   return (
-    <th style={{
-      textAlign: 'left', padding: '10px 16px', fontSize: 10.5, fontWeight: 700,
-      textTransform: 'uppercase' as const, letterSpacing: '0.05em', color: 'var(--gray-500)',
-      background: 'var(--bg-page)', borderBottom: '1px solid var(--border)',
+    <span style={{
+      fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 9999,
+      whiteSpace: 'nowrap' as const,
+      color: danger ? '#E8180A' : 'var(--gray-600)',
+      background: danger ? 'var(--red-50)' : 'var(--gray-100)',
+      border: `1px solid ${danger ? 'var(--red-ring)' : 'var(--border)'}`,
     }}>
       {children}
-    </th>
+    </span>
   )
 }
 
