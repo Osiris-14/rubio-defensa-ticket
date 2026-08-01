@@ -50,6 +50,12 @@ CALENDARIOS = [
     ("PUESTO 3 FELIPE TRASER", "armador_puesto3"),
     ("PUESTO 4 DE 8AM 4PM", "armador_puesto4"),
     ("PUESTO 5 OSCAR", "armador_puesto5"),
+    # Faltaban: sin estos, la pestana Doblado de la web queda vacia porque
+    # los eventos de Deivi nunca llegan a CSV. Si el fragmento no coincide
+    # con ningun calendario, el script solo avisa y sigue.
+    ("DEIVI", "armador_p13_deivi"),
+    ("ENCARGADO DE FABRICACION", "armador_encargado_fabricacion"),
+    ("PUESTO 3 ARMADOR", "armador_puesto3_armador"),
 ]
 
 # Solo exporta eventos cuyo año de inicio coincida. "" = todos los años.

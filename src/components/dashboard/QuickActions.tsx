@@ -1,5 +1,5 @@
 'use client'
-import { Plus, ArrowLeftRight, Gauge, Wallet, Download, RefreshCw, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, Gauge, Wallet, Download, RefreshCw, type LucideIcon } from 'lucide-react'
 
 export type DashboardView = 'dashboard' | 'form' | 'tickets' | 'produccion' | 'pagos' | 'calendario' | 'capacidad' | 'movimientos'
 
@@ -29,7 +29,6 @@ const toneStyles: Record<Action['tone'], { bg: string; color: string; border: st
 
 export default function QuickActions ({ onNavigate, onRefresh, onExport, lastUpdated, canExport = true }: Props) {
   const actions: Action[] = [
-    { id: 'new',      label: 'Nuevo ticket',  icon: Plus,          tone: 'red',   onClick: () => onNavigate('form') },
     { id: 'mov',      label: 'Movimientos',   icon: ArrowLeftRight, tone: 'blue',  onClick: () => onNavigate('movimientos') },
     { id: 'cap',      label: 'Capacidad',     icon: Gauge,         tone: 'amber', onClick: () => onNavigate('capacidad') },
     { id: 'pay',      label: 'Pagos',         icon: Wallet,        tone: 'green', onClick: () => onNavigate('pagos') },

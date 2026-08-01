@@ -30,37 +30,33 @@ export const DIAS_ALERTA = 2
 // CSV trae 'PUESTO 2 ARMADOR ' (espacio final) y
 // 'EVENNOT  PUESTO 4  5PM-9PM' (espacios dobles).
 // ─────────────────────────────────────────────────────────
-interface CalendarioConocido {
-  valor: string
-  etapa: Etapa
-  label: string
-}
-
-const CALENDARIOS: CalendarioConocido[] = [
-  // Corte
-  { valor: 'PUESTO 2 ARMADOR',         etapa: 'corte',       label: 'Puesto 2' },
-  // Doblado
-  { valor: 'P-13 DEIVI DOBLADOR',      etapa: 'doblado',     label: 'David (P-13)' },
-  { valor: 'DAVID P-13',               etapa: 'doblado',     label: 'David (P-13)' },
-  // Fabricación
-  { valor: 'ENCARGADO DE FABRICACION', etapa: 'fabricacion', label: 'Encargado de Fabricación' },
-  { valor: 'PUESTO 3 ARMADOR',         etapa: 'fabricacion', label: 'Puesto 3 Armador' },
-  { valor: 'PUESTO 3 FELIPE TRASER',   etapa: 'fabricacion', label: 'Puesto 3 Felipe' },
-  { valor: 'PUESTO 4 DE 8AM 4PM',      etapa: 'fabricacion', label: 'Puesto 4 día' },
-  { valor: 'EVENNOT PUESTO 4 5PM-9PM', etapa: 'fabricacion', label: 'Puesto 4 Noche' },
-  { valor: 'puesto 5 oscar',           etapa: 'fabricacion', label: 'Puesto 5 Oscar' },
-]
-
+// Se normalizan mayúsculas y espacios repetidos antes de comparar: el
+// CSV trae 'PUESTO 2 ARMADOR ' (espacio final) y
+// 'EVENNOT  PUESTO 4  5PM-9PM' (espacios dobles).
 function clave (calendario: string): string {
   return calendario.toUpperCase().replace(/\s+/g, ' ').trim()
 }
 
-const POR_CLAVE = new Map(CALENDARIOS.map(c => [clave(c.valor), c]))
+// Equivalente a ILIKE '%texto%'
+function contiene (k: string, ...fragmentos: string[]): boolean {
+  return fragmentos.some(f => k.includes(f.toUpperCase()))
+}
 
 export function rolCalendario (calendario: string): Etapa {
+  const k = clave(calendario)
+
+  // DOBLADO primero: 'P-13 DEIVI DOBLADOR' no colisiona con los demás.
+  if (contiene(k, 'DEIVI', 'P-13', 'DOBLADOR')) return 'doblado'
+
+  // CORTE: coincidencia exacta (ya normalizada) con el calendario de Puesto 2.
+  if (k === 'PUESTO 2 ARMADOR') return 'corte'
+
+  // FABRICACIÓN: Puesto 3/4, Encargado, Evennot, Oscar…
+  if (contiene(k, 'ENCARGADO', 'PUESTO 3', 'PUESTO 4', 'EVENNOT', 'OSCAR')) return 'fabricacion'
+
   // Un calendario desconocido cae en Fabricación para que sus órdenes
   // sigan siendo visibles en vez de desaparecer sin aviso.
-  return POR_CLAVE.get(clave(calendario))?.etapa ?? 'fabricacion'
+  return 'fabricacion'
 }
 
 // Reglas aprobadas, decididas con TODOS los puestos de la orden:
@@ -89,8 +85,15 @@ const PUESTOS_ORDEN = [
 ]
 
 export function labelPuesto (calendario: string): string {
-  const conocido = POR_CLAVE.get(clave(calendario))
-  if (conocido) return conocido.label
+  const k = clave(calendario)
+  if (contiene(k, 'DEIVI', 'P-13', 'DOBLADOR')) return 'Deivi (P-13)'
+  if (k === 'PUESTO 2 ARMADOR') return 'Puesto 2'
+  if (contiene(k, 'ENCARGADO')) return 'Encargado de Fabricación'
+  if (contiene(k, 'PUESTO 3') && contiene(k, 'FELIPE')) return 'Puesto 3 Felipe'
+  if (contiene(k, 'PUESTO 3')) return 'Puesto 3 Armador'
+  if (contiene(k, 'EVENNOT')) return 'Puesto 4 Noche'
+  if (contiene(k, 'PUESTO 4')) return 'Puesto 4 día'
+  if (contiene(k, 'OSCAR')) return 'Puesto 5 Oscar'
   const limpio = calendario.replace(/\s+/g, ' ').trim()
   return limpio.length > 24 ? `${limpio.slice(0, 24)}…` : limpio
 }

@@ -33,6 +33,11 @@ export const CALENDARIO_FILES = [
   'armador_puesto3',
   'armador_puesto4',
   'armador_puesto5',
+  // Los exporta exportar_calendarios_armadores.py. Mientras el CSV no
+  // exista, fetchEventosArmador lo salta sin romper nada.
+  'armador_p13_deivi',
+  'armador_encargado_fabricacion',
+  'armador_puesto3_armador',
 ]
 
 const PIEZA_KEYWORDS = [
