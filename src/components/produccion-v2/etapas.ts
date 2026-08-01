@@ -6,10 +6,7 @@
 // Puro: no toca Supabase ni el calendario. Consume los EventoArmador
 // y las facturas que ya carga la vista.
 // ─────────────────────────────────────────────────────────
-import {
-  fechaCompromisoDesdeDia,
-  type EventoArmador,
-} from '@/lib/ordenes-core'
+import { type EventoArmador } from '@/lib/ordenes-core'
 import { type FacturaProduccion } from '@/lib/production-v2'
 
 export type Etapa = 'corte' | 'doblado' | 'fabricacion'
@@ -171,23 +168,24 @@ export function rangoDe (periodo: Periodo, hoy: Date): Rango {
 }
 
 // ─────────────────────────────────────────────────────────
+// Única información permitida desde Alegra (emparejando el número de
+// orden con la factura): factura + estado de pago. Cliente y vehículo
+// van en TarjetaOrden. Sin piezas, sin productos, sin costo.
 export interface DatosAlegra {
   factura: string
-  total: number
-  saldo: number
   pagada: boolean
 }
 
 export interface TarjetaOrden {
   key: string
   orden: string
-  pieza: string
+  /** Título EXACTO del evento de Google Calendar, tal como se escribió. */
+  titulo: string
   fecha: string
   puesto: string
   puestoLabel: string
   vehiculo: string | null
   cliente: string | null
-  compromiso: string | null
   dias: number
   alerta: boolean
   /** null = la orden no casó con ninguna factura de Alegra. */
@@ -224,7 +222,6 @@ export interface ModeloProduccion {
 interface BuildParams {
   eventos: EventoArmador[]
   facturas: FacturaProduccion[]
-  compromisos: Map<string, string>
   hoy: Date
   confirmadas: Set<string>
   periodo: Periodo
@@ -232,7 +229,7 @@ interface BuildParams {
 }
 
 export function buildModelo ({
-  eventos, facturas, compromisos, hoy, confirmadas, periodo, filtro = '',
+  eventos, facturas, hoy, confirmadas, periodo, filtro = '',
 }: BuildParams): ModeloProduccion {
   const hoyISO = isoLocal(hoy)
   const rango = rangoDe(periodo, hoy)
@@ -264,26 +261,22 @@ export function buildModelo ({
 
     const etapa = etapaPorOrden.get(ev.orden) ?? 'corte'
     const factura = porTalonario.get(ev.orden) ?? null
-    const compCal = ev.dia != null ? fechaCompromisoDesdeDia(ev.dia, hoy) : null
     const dias = diasDesde(fecha, hoyISO)
 
     porEtapa[etapa].push({
       key: `${ev.id || ev.orden}-${i}`,
       orden: ev.orden,
-      pieza: ev.pieza,
+      titulo: ev.pieza,
       fecha,
       puesto: ev.calendario,
       puestoLabel: labelPuesto(ev.calendario),
       vehiculo: factura?.vehiculo ?? null,
       cliente: factura?.cliente ?? null,
-      compromiso: compCal ?? compromisos.get(ev.orden) ?? null,
       dias,
       alerta: dias > DIAS_ALERTA && !confirmadas.has(ev.orden),
       alegra: factura
         ? {
             factura: factura.factura,
-            total: factura.total,
-            saldo: factura.saldo,
             pagada: factura.saldo <= UMBRAL_SALDO,
           }
         : null,

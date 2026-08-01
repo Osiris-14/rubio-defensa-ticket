@@ -233,9 +233,6 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
   onConfirmar: (t: TarjetaOrden) => void
 }) {
   const enCurso = confirmando === t.orden
-  const info = [t.vehiculo, t.cliente, t.compromiso ? formatoCorto(t.compromiso) : null]
-    .filter(Boolean)
-    .join(' · ')
 
   return (
     <div style={{
@@ -252,19 +249,24 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
         </div>
       )}
 
-      {/* 2. Orden + pieza — un evento de calendario = una orden */}
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', lineHeight: 1.35 }}>
-        #{t.orden}{t.pieza ? ` · ${t.pieza}` : ''}
+      {/* 2. Orden + título del calendario (exacto) */}
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A', lineHeight: 1.35 }}>
+        #{t.orden} · {t.titulo}
       </div>
 
-      {/* 3. Info */}
-      {info && (
-        <div style={{ fontSize: 11, color: '#666', marginTop: 5, lineHeight: 1.35 }}>
-          {info}
-        </div>
-      )}
+      {/* 3. Metadatos: fecha · puesto · Alegra (si casó la factura) */}
+      <div style={{ fontSize: 11, color: '#666', marginTop: 6, lineHeight: 1.6 }}>
+        <div>Fecha · {formatoFecha(t.fecha)}</div>
+        <div>Puesto · {t.puestoLabel}</div>
+        {t.alegra && (
+          <>
+            <div>{t.cliente || '—'} · {t.vehiculo || '—'}</div>
+            <div>Factura · {t.alegra.factura}</div>
+          </>
+        )}
+      </div>
 
-      {/* 5. Estado de pago — se omite si no hay match en Alegra */}
+      {/* 4. Estado de pago — se omite si no hay match en Alegra */}
       {t.alegra && (
         <div style={{ marginTop: 6 }}>
           {t.alegra.pagada ? (
@@ -279,13 +281,13 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
               fontSize: 10, padding: '2px 8px', borderRadius: 10,
               background: '#FDECEA', color: ROJO, fontWeight: 600,
             }}>
-              Pendiente · {formatoMoneda(t.alegra.saldo)}
+              Pendiente
             </span>
           )}
         </div>
       )}
 
-      {/* 6. Confirmar salida — solo en alertas */}
+      {/* 5. Confirmar salida — solo en alertas */}
       {t.alerta && (
         <button
           type='button'
@@ -306,11 +308,7 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
 }
 
 // ─────────────────────────────────────────────────────────
-function formatoCorto (fechaISO: string): string {
+function formatoFecha (fechaISO: string): string {
   const [, m, d] = fechaISO.split('-')
   return `${d}/${m}`
-}
-
-function formatoMoneda (n: number): string {
-  return `RD$ ${new Intl.NumberFormat('es-DO', { maximumFractionDigits: 0 }).format(Math.round(n))}`
 }

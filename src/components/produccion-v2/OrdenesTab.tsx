@@ -6,14 +6,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AlertCircle } from 'lucide-react'
 import {
-  fetchActivePieceNames,
   fetchMovimientos,
   insertMovimiento,
   fetchFacturasProduccion,
   type FacturaProduccion,
 } from '@/lib/production-v2'
 import {
-  fetchCompromisos,
   fetchEventosArmador,
   type EventoArmador,
 } from '@/lib/ordenes'
@@ -31,7 +29,6 @@ interface Props {
 export default function OrdenesTab ({ user, onChanged, busqueda, onAlertas }: Props) {
   const [eventos, setEventos] = useState<EventoArmador[]>([])
   const [facturas, setFacturas] = useState<FacturaProduccion[]>([])
-  const [compromisos, setCompromisos] = useState<Map<string, string>>(new Map())
   const [confirmadas, setConfirmadas] = useState<Set<string>>(new Set())
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,16 +45,14 @@ export default function OrdenesTab ({ user, onChanged, busqueda, onAlertas }: Pr
     async function load () {
       try {
         const today = new Date()
-        const [evs, facs, comp, movs] = await Promise.all([
+        const [evs, facs, movs] = await Promise.all([
           fetchEventosArmador(),
           fetchFacturasProduccion().catch(() => [] as FacturaProduccion[]),
-          fetchCompromisos(),
           fetchMovimientos(500).catch(() => []),
         ])
         if (!active) return
         setEventos(evs)
         setFacturas(facs)
-        setCompromisos(comp)
         setConfirmadas(new Set(movs.filter(m => m.tipo === 'SALIDA' && m.confirmada).map(m => m.numero_orden)))
         setHoy(today)
         setError('')
@@ -68,15 +63,12 @@ export default function OrdenesTab ({ user, onChanged, busqueda, onAlertas }: Pr
       }
     }
     load()
-    // Se precargan los nombres de pieza que ya usaba la vista; no
-    // bloquean el render si fallan.
-    void fetchActivePieceNames().catch(() => [])
     return () => { active = false }
   }, [])
 
   const modelo = useMemo(
-    () => buildModelo({ eventos, facturas, compromisos, hoy, confirmadas, periodo, filtro: busqueda }),
-    [eventos, facturas, compromisos, hoy, confirmadas, periodo, busqueda],
+    () => buildModelo({ eventos, facturas, hoy, confirmadas, periodo, filtro: busqueda }),
+    [eventos, facturas, hoy, confirmadas, periodo, busqueda],
   )
 
   // El pill rojo del top bar vive en el padre.
@@ -89,7 +81,7 @@ export default function OrdenesTab ({ user, onChanged, busqueda, onAlertas }: Pr
         numero_orden: t.orden,
         calendar_event_id: null,
         calendar_name: t.puesto,
-        pieza: t.pieza || null,
+        pieza: t.titulo || null,
         vehiculo: t.vehiculo,
         cliente: t.cliente,
         desde_puesto: t.puesto,
