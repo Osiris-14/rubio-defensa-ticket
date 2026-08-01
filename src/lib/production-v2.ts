@@ -896,6 +896,50 @@ export interface OrdenMovimiento {
   created_at: string
 }
 
+// ─────────────────────────────────────────────────────────
+// Facturas con las columnas de dinero (para el Dashboard: Cobrado,
+// Pendiente cobrar, Facturado por orden). La vista silver ya existe;
+// aquí solo se leen las columnas que el dashboard necesita.
+// ─────────────────────────────────────────────────────────
+export interface FacturaProduccion {
+  alegra_id: string
+  factura: string
+  talonario: string | null
+  cliente: string | null
+  vehiculo: string | null
+  fecha: string
+  total: number
+  total_pagado: number
+  saldo: number
+}
+
+const SELECT_FACTURA = 'alegra_id, factura, talonario, cliente, vehiculo, fecha, total, total_pagado, saldo'
+
+export async function fetchFacturasProduccion (): Promise<FacturaProduccion[]> {
+  return withSelfHeal(async () => {
+    const { data, error } = await supabase
+      .schema('silver')
+      .from('v_facturas_produccion')
+      .select(SELECT_FACTURA)
+      .order('fecha', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (data ?? []).map(r => {
+      const row = r as Record<string, unknown>
+      return {
+        alegra_id: String(row.alegra_id ?? ''),
+        factura: String(row.factura ?? ''),
+        talonario: (row.talonario as string | null) ?? null,
+        cliente: (row.cliente as string | null) ?? null,
+        vehiculo: (row.vehiculo as string | null) ?? null,
+        fecha: String(row.fecha ?? ''),
+        total: Number(row.total ?? 0),
+        total_pagado: Number(row.total_pagado ?? 0),
+        saldo: Number(row.saldo ?? 0),
+      }
+    })
+  })
+}
+
 export async function fetchPuestosCapacidad (): Promise<PuestoCapacidad[]> {
   const { data, error } = await supabase
     .from('puesto_capacidad')

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { AlertTriangle, Clock, CalendarClock, ArrowRight, AlertCircle } from 'lucide-react'
+import { AlertTriangle, Clock, ArrowRight, AlertCircle } from 'lucide-react'
 import { fetchProductionTickets, type ProductionTicket } from '@/lib/production-v2'
 
 interface Props {

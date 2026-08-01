@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import {
   Activity, AlertTriangle, Clock, ArrowRight, RefreshCw,
-  Filter, Search,
+  Filter, Search, Inbox, PauseCircle,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -14,31 +14,33 @@ import {
   fetchOrdenesMapa,
 } from '@/lib/ordenes'
 import { useSnapshotEngine } from '@/lib/useSnapshotEngine'
+import { labelPuesto, colorPuesto, COLOR_CONFIRMADA } from '@/lib/puestos'
 
 type FilterPeriod = 'hoy' | 'semana' | 'mes'
 type FilterEstado = 'todos' | 'estancadas' | 'activas'
 
-// ── Puesto color map (matches calendar string values)
-const PUESTO_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'PUESTO 2 ARMADOR':          { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' },
-  'EVENNOT  PUESTO 4  5PM-9PM': { bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA' },
-  'PUESTO 4 DE 8AM 4PM':       { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' },
-  'puesto 5 oscar':            { bg: '#FAF5FF', text: '#7C3AED', border: '#DDD6FE' },
-}
+const WARNING_BG = '#FAEEDA'
+const WARNING_TEXT = '#B8860B'
 
-const DEFAULT_PUESTO_COLOR = { bg: 'var(--gray-50)', text: 'var(--gray-700)', border: 'var(--border)' }
+// El motor de snapshot escribe ENTRADA / CAMBIO_PUESTO / SALIDA / ESTANCADA.
+// La hoja los presenta con el vocabulario del mockup.
+type TipoVista = 'movimiento' | 'estancada' | 'confirmada' | 'salida'
 
-function puestoColor (puesto: string | null) {
-  if (!puesto) return DEFAULT_PUESTO_COLOR
-  return PUESTO_COLORS[puesto] ?? DEFAULT_PUESTO_COLOR
+function tipoVista (m: OrdenMovimiento): TipoVista {
+  if (m.confirmada) return 'confirmada'
+  if (m.tipo === 'ESTANCADA') return 'estancada'
+  if (m.tipo === 'SALIDA') return 'salida'
+  return 'movimiento'
 }
 
 function relativeTime (iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return 'hace unos segundos'
+  if (diff < 60) return 'hace un momento'
   if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`
   if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`
-  return `hace ${Math.floor(diff / 86400)}d`
+  const dias = Math.floor(diff / 86400)
+  if (dias === 1) return 'ayer'
+  return `${dias} días`
 }
 
 function daysDiff (iso: string): number {
@@ -46,7 +48,8 @@ function daysDiff (iso: string): number {
 }
 
 function isoToday () {
-  return new Date().toISOString().slice(0, 10)
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export default function HojaMovimientosView () {
@@ -72,7 +75,6 @@ export default function HojaMovimientosView () {
       setMovimientos(movs)
       if (runSnap) {
         await runSnapshot(eventos, ordenesMap)
-        // Reload after snapshot inserts
         const updated = await fetchMovimientos(500)
         setMovimientos(updated)
       }
@@ -82,7 +84,6 @@ export default function HojaMovimientosView () {
     }
   }, [runSnapshot])
 
-  // Initial load with snapshot
   useEffect(() => {
     let active = true
     void (async () => {
@@ -96,13 +97,12 @@ export default function HojaMovimientosView () {
     return () => { active = false }
   }, [loadData])
 
-  // Ticking clock for relative times / period windows
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(id)
   }, [])
 
-  // Realtime subscription
+  // Realtime: las filas nuevas entran en vivo.
   useEffect(() => {
     const channel = supabase
       .channel('hoja-movimientos-rt')
@@ -120,36 +120,50 @@ export default function HojaMovimientosView () {
     setRefreshing(false)
   }
 
-  // ── Filters
+  // Órdenes con salida confirmada — no cuentan como estancadas.
+  const confirmadas = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of movimientos) if (m.confirmada) set.add(m.numero_orden)
+    return set
+  }, [movimientos])
+
   const filtered = useMemo(() => {
     const today = isoToday()
     const weekAgo = new Date(now - 7 * 86400000).toISOString()
     const monthAgo = new Date(now - 30 * 86400000).toISOString()
 
-    return movimientos.filter(m => {
-      // Period
-      if (period === 'hoy' && !m.ocurrido_en.startsWith(today)) return false
-      if (period === 'semana' && m.ocurrido_en < weekAgo) return false
-      if (period === 'mes' && m.ocurrido_en < monthAgo) return false
+    return movimientos
+      .filter(m => {
+        if (period === 'hoy' && !m.ocurrido_en.startsWith(today)) return false
+        if (period === 'semana' && m.ocurrido_en < weekAgo) return false
+        if (period === 'mes' && m.ocurrido_en < monthAgo) return false
 
-      // Estado
-      if (estado === 'estancadas' && m.tipo !== 'ESTANCADA' && daysDiff(m.ocurrido_en) < 2) return false
-      if (estado === 'activas' && m.tipo === 'SALIDA') return false
+        if (estado === 'estancadas' && m.tipo !== 'ESTANCADA' && daysDiff(m.ocurrido_en) < 2) return false
+        if (estado === 'activas' && m.tipo === 'SALIDA') return false
 
-      // Search
-      if (searchOrden && !m.numero_orden.toLowerCase().includes(searchOrden.toLowerCase())) return false
-      if (searchPuesto && !m.hacia_puesto.toLowerCase().includes(searchPuesto.toLowerCase())) return false
-
-      return true
-    })
+        if (searchOrden && !m.numero_orden.toLowerCase().includes(searchOrden.toLowerCase())) return false
+        if (searchPuesto) {
+          const q = searchPuesto.toLowerCase()
+          const enCrudo = (m.hacia_puesto ?? '').toLowerCase().includes(q)
+          const enLabel = labelPuesto(m.hacia_puesto).toLowerCase().includes(q)
+          if (!enCrudo && !enLabel) return false
+        }
+        return true
+      })
+      // Más reciente primero.
+      .sort((a, b) => b.ocurrido_en.localeCompare(a.ocurrido_en))
   }, [movimientos, period, estado, searchOrden, searchPuesto, now])
 
-  // ── KPIs
-  const today = isoToday()
-  const movHoy = movimientos.filter(m => m.ocurrido_en.startsWith(today)).length
+  // ── Card 1: movimientos de hoy
+  const movHoy = useMemo(() => {
+    const today = isoToday()
+    return movimientos.filter(m =>
+      m.ocurrido_en.startsWith(today) && tipoVista(m) === 'movimiento',
+    ).length
+  }, [movimientos])
 
+  // ── Card 2: días promedio entre movimientos consecutivos de una orden
   const tiempoPromedio = useMemo(() => {
-    // Average days between consecutive ENTRADA and CAMBIO_PUESTO per order
     const byOrden = new Map<string, OrdenMovimiento[]>()
     for (const m of movimientos) {
       if (m.tipo === 'ENTRADA' || m.tipo === 'CAMBIO_PUESTO') {
@@ -162,23 +176,27 @@ export default function HojaMovimientosView () {
     for (const rows of byOrden.values()) {
       const sorted = [...rows].sort((a, b) => a.ocurrido_en.localeCompare(b.ocurrido_en))
       for (let i = 1; i < sorted.length; i++) {
-        const d = Math.floor((new Date(sorted[i].ocurrido_en).getTime() - new Date(sorted[i-1].ocurrido_en).getTime()) / 86400000)
+        const d = (new Date(sorted[i].ocurrido_en).getTime() - new Date(sorted[i - 1].ocurrido_en).getTime()) / 86400000
         if (d >= 0) diffs.push(d)
       }
     }
     if (!diffs.length) return null
-    return Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length)
+    return diffs.reduce((a, b) => a + b, 0) / diffs.length
   }, [movimientos])
 
+  // ── Card 3: órdenes cuyo último movimiento tiene +2d y no fueron confirmadas
   const estancadas = useMemo(() => {
-    // Orders where latest movement is >2 days old and type != SALIDA
     const latestByOrden = new Map<string, OrdenMovimiento>()
     for (const m of movimientos) {
       const cur = latestByOrden.get(m.numero_orden)
       if (!cur || m.ocurrido_en > cur.ocurrido_en) latestByOrden.set(m.numero_orden, m)
     }
-    return [...latestByOrden.values()].filter(m => m.tipo !== 'SALIDA' && daysDiff(m.ocurrido_en) >= 2)
-  }, [movimientos])
+    return [...latestByOrden.values()].filter(m =>
+      m.tipo !== 'SALIDA' &&
+      !confirmadas.has(m.numero_orden) &&
+      daysDiff(m.ocurrido_en) > 2,
+    )
+  }, [movimientos, confirmadas])
 
   return (
     <div style={{ animation: 'fadeInUp 0.3s ease', padding: '40px 48px 80px' }}>
@@ -209,76 +227,54 @@ export default function HojaMovimientosView () {
       {error && (
         <div style={{
           background: 'var(--red-50)', border: '1px solid var(--red-ring)',
-          borderRadius: 'var(--radius-lg)', padding: '12px 16px', marginBottom: 20,
+          borderRadius: 10, padding: '12px 16px', marginBottom: 20,
           fontSize: 13.5, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <AlertTriangle size={15} /> {error}
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 28 }}>
-        <KpiCard
+      {/* 3 métricas */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginBottom: 24 }}>
+        <MetricCard
           label='Movimientos hoy'
           value={String(movHoy)}
           icon={Activity}
-          tone='blue'
         />
-        <KpiCard
-          label='Tiempo promedio por etapa'
-          value={tiempoPromedio !== null ? `${tiempoPromedio}d` : '—'}
+        <MetricCard
+          label='Tiempo prom. por etapa'
+          value={tiempoPromedio !== null ? `${tiempoPromedio.toFixed(1)} días` : '—'}
           icon={Clock}
-          tone='green'
         />
-        <KpiCard
-          label='Estancadas +2 días'
+        <MetricCard
+          label='Estancadas +2d'
           value={String(estancadas.length)}
           icon={AlertTriangle}
-          tone={estancadas.length > 0 ? 'amber' : 'green'}
+          bg={WARNING_BG}
+          color={WARNING_TEXT}
         />
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-        {/* Period */}
-        <div className='card' style={{ padding: '4px 6px', display: 'flex', gap: 2 }}>
+      {/* Filtros */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={segmentedWrap}>
           {(['hoy', 'semana', 'mes'] as FilterPeriod[]).map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              style={{
-                padding: '5px 12px', borderRadius: 'var(--radius-sm)', border: 'none',
-                background: period === p ? 'var(--red)' : 'transparent',
-                color: period === p ? '#fff' : 'var(--gray-600)',
-                fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-              }}
-            >
+            <button key={p} onClick={() => setPeriod(p)} style={segmentedBtn(period === p, 'var(--red)')}>
               {p === 'hoy' ? 'Hoy' : p === 'semana' ? 'Semana' : 'Mes'}
             </button>
           ))}
         </div>
 
-        {/* Estado */}
-        <div className='card' style={{ padding: '4px 6px', display: 'flex', gap: 2 }}>
+        <div style={segmentedWrap}>
           {(['todos', 'estancadas', 'activas'] as FilterEstado[]).map(e => (
-            <button
-              key={e}
-              onClick={() => setEstado(e)}
-              style={{
-                padding: '5px 12px', borderRadius: 'var(--radius-sm)', border: 'none',
-                background: estado === e ? 'var(--gray-800)' : 'transparent',
-                color: estado === e ? '#fff' : 'var(--gray-600)',
-                fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-              }}
-            >
+            <button key={e} onClick={() => setEstado(e)} style={segmentedBtn(estado === e, 'var(--gray-800)')}>
               {e === 'todos' ? 'Todos' : e === 'estancadas' ? 'Estancadas' : 'Activas'}
             </button>
           ))}
         </div>
 
-        {/* Search orden */}
         <div style={{ position: 'relative' }}>
-          <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)' }} />
+          <Search size={13} style={iconInput} />
           <input
             className='input-base'
             style={{ height: 34, paddingLeft: 30, width: 130, fontSize: 12.5 }}
@@ -288,9 +284,8 @@ export default function HojaMovimientosView () {
           />
         </div>
 
-        {/* Search puesto */}
         <div style={{ position: 'relative' }}>
-          <Filter size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)' }} />
+          <Filter size={13} style={iconInput} />
           <input
             className='input-base'
             style={{ height: 34, paddingLeft: 30, width: 150, fontSize: 12.5 }}
@@ -300,143 +295,49 @@ export default function HojaMovimientosView () {
           />
         </div>
 
-        <span style={{ fontSize: 12, color: 'var(--gray-400)', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 12, color: '#999', marginLeft: 'auto' }}>
           {filtered.length} movimiento{filtered.length !== 1 ? 's' : ''}
         </span>
       </div>
 
-      {/* Movement Table */}
-      <div className='card' style={{ padding: 0, overflow: 'hidden' }}>
+      {/* Tabla */}
+      <div style={{
+        background: '#fff', border: '0.5px solid #ECECEC', borderRadius: 12, overflow: 'hidden',
+      }}>
         <div style={{ overflowX: 'auto' }}>
-          <table className='table-dark' style={{ minWidth: 680 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
             <thead>
               <tr>
-                <th>Orden</th>
-                <th>Movimiento</th>
-                <th>Pieza / Vehículo</th>
-                <th>Cuándo</th>
-                <th>Estado</th>
+                <Th>Orden</Th>
+                <Th>Movimiento</Th>
+                <Th>Vehículo</Th>
+                <Th align='right'>Cuándo</Th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: 'var(--gray-400)', fontSize: 13 }}>
+                  <td colSpan={4} style={{ padding: '48px', textAlign: 'center', color: '#999', fontSize: 13 }}>
                     Cargando movimientos…
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: 'var(--gray-400)', fontSize: 13 }}>
-                    No hay movimientos {period === 'hoy' ? 'hoy' : `esta ${period}`}.
-                    {period === 'hoy' && <> Presiona <strong>Sincronizar</strong> para detectar cambios en el calendario.</>}
+                  <td colSpan={4} style={{ padding: '56px 24px' }}>
+                    <EmptyState />
                   </td>
                 </tr>
               ) : (
-                filtered.map(m => {
-                  const dias = daysDiff(m.ocurrido_en)
-                  const isStagnant = (m.tipo === 'ESTANCADA' || dias >= 2) && m.tipo !== 'SALIDA'
-                  const desde = puestoColor(m.desde_puesto)
-                  const hacia = puestoColor(m.hacia_puesto)
-                  return (
-                    <tr
-                      key={m.id}
-                      style={{
-                        background: isStagnant ? '#FFFBEB' : undefined,
-                        transition: 'background 0.15s',
-                      }}
-                    >
-                      {/* Orden */}
-                      <td style={{ fontWeight: 700, color: 'var(--gray-900)', fontSize: 13, whiteSpace: 'nowrap' }}>
-                        #{m.numero_orden}
-                      </td>
-
-                      {/* Movimiento */}
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          {m.desde_puesto && (
-                            <>
-                              <span style={{
-                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
-                                background: desde.bg, color: desde.text, border: `1px solid ${desde.border}`,
-                                whiteSpace: 'nowrap',
-                              }}>
-                                {m.desde_puesto}
-                              </span>
-                              <ArrowRight size={12} style={{ color: 'var(--gray-400)', flexShrink: 0 }} />
-                            </>
-                          )}
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
-                            background: hacia.bg, color: hacia.text, border: `1px solid ${hacia.border}`,
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {m.hacia_puesto}
-                          </span>
-                          {m.tipo === 'ENTRADA' && (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--green)', background: 'var(--green-bg)', padding: '1px 6px', borderRadius: 9999, border: '1px solid var(--green-ring)' }}>ENTRADA</span>
-                          )}
-                          {m.tipo === 'SALIDA' && (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gray-500)', background: 'var(--gray-50)', padding: '1px 6px', borderRadius: 9999, border: '1px solid var(--border)' }}>SALIDA</span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Pieza / Vehículo */}
-                      <td style={{ minWidth: 160 }}>
-                        {m.pieza && <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gray-900)' }}>{m.pieza}</div>}
-                        {m.vehiculo && <div style={{ fontSize: 11, color: 'var(--gray-500)', marginTop: 1 }}>{m.vehiculo}</div>}
-                        {!m.pieza && !m.vehiculo && <span style={{ color: 'var(--gray-400)', fontSize: 12 }}>—</span>}
-                      </td>
-
-                      {/* Cuándo */}
-                      <td style={{ fontSize: 12, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>
-                        {relativeTime(m.ocurrido_en)}
-                      </td>
-
-                      {/* Estado */}
-                      <td>
-                        {isStagnant ? (
-                          <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999,
-                            background: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            +{m.dias_estancada || dias}d estancada
-                          </span>
-                        ) : m.tipo === 'CAMBIO_PUESTO' ? (
-                          <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999,
-                            background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE',
-                          }}>
-                            Movida
-                          </span>
-                        ) : m.tipo === 'SALIDA' ? (
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', padding: '2px 8px',
-                          }}>
-                            Finalizada
-                          </span>
-                        ) : (
-                          <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999,
-                            background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-ring)',
-                          }}>
-                            Nueva
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })
+                filtered.map(m => (
+                  <MovimientoRow key={m.id} m={m} confirmada={confirmadas.has(m.numero_orden)} />
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Realtime indicator */}
-      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--gray-400)' }}>
+      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#999' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
         Actualizaciones en tiempo real activas
       </div>
@@ -444,26 +345,151 @@ export default function HojaMovimientosView () {
   )
 }
 
-function KpiCard ({ label, value, icon: Icon, tone = 'green' }: {
+// ─────────────────────────────────────────────────────────
+function MovimientoRow ({ m, confirmada }: { m: OrdenMovimiento; confirmada: boolean }) {
+  const dias = daysDiff(m.ocurrido_en)
+  const vista = tipoVista(m)
+  const estancada = vista === 'estancada' || (!confirmada && vista !== 'salida' && dias > 2)
+
+  return (
+    <tr style={{
+      borderTop: '0.5px solid #ECECEC',
+      background: estancada ? WARNING_BG : undefined,
+    }}>
+      {/* Orden */}
+      <td style={{ ...td, fontWeight: 700, color: '#1A1A1A', fontSize: 13, whiteSpace: 'nowrap' }}>
+        #{m.numero_orden}
+      </td>
+
+      {/* Movimiento */}
+      <td style={td}>
+        {estancada ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: WARNING_TEXT, fontSize: 12, fontWeight: 600 }}>
+            <PauseCircle size={13} style={{ flexShrink: 0 }} />
+            Sin moverse — sigue en {labelPuesto(m.hacia_puesto)}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {m.desde_puesto && m.desde_puesto !== m.hacia_puesto && (
+              <>
+                <PuestoChip puesto={m.desde_puesto} />
+                <ArrowRight size={12} style={{ color: '#999', flexShrink: 0 }} />
+              </>
+            )}
+            <PuestoChip puesto={m.hacia_puesto} />
+            {vista === 'confirmada' && (
+              <span style={chip(COLOR_CONFIRMADA)}>Confirmada</span>
+            )}
+          </div>
+        )}
+      </td>
+
+      {/* Vehículo */}
+      <td style={{ ...td, fontSize: 12, color: '#666', minWidth: 140 }}>
+        {m.vehiculo || '—'}
+      </td>
+
+      {/* Cuándo */}
+      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+        {estancada ? (
+          <span style={{ fontSize: 12, fontWeight: 700, color: WARNING_TEXT }}>
+            {dias} días
+          </span>
+        ) : (
+          <span style={{ fontSize: 12, color: '#999' }}>
+            {relativeTime(m.ocurrido_en)}
+          </span>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+function PuestoChip ({ puesto }: { puesto: string | null }) {
+  return <span style={chip(colorPuesto(puesto))}>{labelPuesto(puesto)}</span>
+}
+
+function chip (c: { bg: string; text: string; border: string }): React.CSSProperties {
+  return {
+    fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 9999,
+    background: c.bg, color: c.text, border: `0.5px solid ${c.border}`,
+    whiteSpace: 'nowrap',
+  }
+}
+
+function EmptyState () {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{
+        width: 46, height: 46, borderRadius: 12, background: '#F7F7F7',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+      }}>
+        <Inbox size={20} strokeWidth={1.6} style={{ color: '#BBB' }} />
+      </div>
+      <div style={{ fontSize: 13.5, color: '#666', fontWeight: 500 }}>
+        No hay movimientos registrados todavía
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────
+function MetricCard ({ label, value, icon: Icon, bg = '#fff', color = '#1A1A1A' }: {
   label: string
   value: string
   icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>
-  tone?: 'red' | 'amber' | 'green' | 'blue'
+  bg?: string
+  color?: string
 }) {
-  const toneColor = { red: 'var(--red)', amber: 'var(--amber)', green: 'var(--green)', blue: 'var(--blue)' }[tone]
   return (
-    <div className='kpi' style={{ borderTop: `2px solid ${toneColor}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ fontSize: 11, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{label}</div>
+    <div style={{
+      background: bg, border: '0.5px solid #ECECEC', borderRadius: 10, padding: '14px 16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{
-          width: 30, height: 30, borderRadius: 'var(--radius)',
-          background: 'var(--gray-50)', color: 'var(--gray-500)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, color: color === '#1A1A1A' ? '#666' : color,
+          textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600,
         }}>
-          <Icon size={13} />
+          {label}
         </div>
+        <Icon size={14} style={{ color: color === '#1A1A1A' ? '#BBB' : color }} />
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--gray-900)', lineHeight: 1, letterSpacing: '-0.02em' }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color, lineHeight: 1, letterSpacing: '-0.02em' }}>
+        {value}
+      </div>
     </div>
   )
+}
+
+// ─────────────────────────────────────────────────────────
+const td: React.CSSProperties = { padding: '11px 14px', verticalAlign: 'middle' }
+
+function Th ({ children, align = 'left' }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+  return (
+    <th style={{
+      textAlign: align, padding: '9px 14px', fontSize: 10.5, fontWeight: 700,
+      textTransform: 'uppercase', letterSpacing: '0.05em', color: '#999',
+      background: '#FAFAFA', borderBottom: '0.5px solid #ECECEC', whiteSpace: 'nowrap',
+    }}>
+      {children}
+    </th>
+  )
+}
+
+const segmentedWrap: React.CSSProperties = {
+  padding: '4px 5px', display: 'flex', gap: 2,
+  background: '#fff', border: '0.5px solid #ECECEC', borderRadius: 8,
+}
+
+function segmentedBtn (active: boolean, activeBg: string): React.CSSProperties {
+  return {
+    padding: '5px 12px', borderRadius: 6, border: 'none',
+    background: active ? activeBg : 'transparent',
+    color: active ? '#fff' : '#666',
+    fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+  }
+}
+
+const iconInput: React.CSSProperties = {
+  position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#BBB',
 }

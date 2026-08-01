@@ -632,6 +632,21 @@ input[type="date"].input-base { color: var(--gray-700); }
 }
 
 /* ─────────────────────────────────────────────────────────
+   Dashboard: filas de 2 paneles que se apilan en pantallas chicas
+   ───────────────────────────────────────────────────────── */
+
+.dash-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .dash-row { grid-template-columns: 1fr; }
+}
+
+/* ─────────────────────────────────────────────────────────
    Tablero de etapas: Corte · Doblado · Fabricación
    Desktop: 3 columnas (Fabricación más ancha por sus puestos).
    Móvil: columnas apiladas y plegables desde su cabecera.
