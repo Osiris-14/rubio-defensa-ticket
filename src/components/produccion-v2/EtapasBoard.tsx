@@ -251,7 +251,7 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
 
       {/* 2. Orden + título del calendario (exacto) */}
       <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A', lineHeight: 1.35 }}>
-        #{t.orden} · {t.titulo}
+        {t.orden ? `#${t.orden} · ` : ''}{t.titulo}
       </div>
 
       {/* 3. Metadatos: fecha · puesto · Alegra (si casó la factura) */}

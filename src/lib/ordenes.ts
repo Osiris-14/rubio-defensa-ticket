@@ -47,8 +47,19 @@ export async function fetchEventosArmador (): Promise<EventoArmador[]> {
       const titulo = get(iTitulo)
       if (!titulo) continue
       const parsed = parseEventoArmador(titulo)
-      if (!parsed) continue
-      eventos.push({ id: get(iId), titulo, inicio: get(iInicio), calendario: get(iCal), color_nombre: get(iColor), ...parsed })
+      // Todo evento se conserva: el calendario es la fuente de verdad.
+      // Sin número de orden detectable, la tarjeta se muestra igual,
+      // simplemente sin enriquecimiento de Alegra.
+      eventos.push({
+        id: get(iId),
+        titulo,
+        inicio: get(iInicio),
+        calendario: get(iCal),
+        color_nombre: get(iColor),
+        pieza: parsed?.pieza ?? titulo,
+        orden: parsed?.orden ?? '',
+        dia: parsed?.dia ?? null,
+      })
     }
   }
   return eventos

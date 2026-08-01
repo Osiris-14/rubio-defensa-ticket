@@ -51,23 +51,9 @@ export function rolCalendario (calendario: string): Etapa {
   // FABRICACIÓN: Puesto 3/4, Encargado, Evennot, Oscar…
   if (contiene(k, 'ENCARGADO', 'PUESTO 3', 'PUESTO 4', 'EVENNOT', 'OSCAR')) return 'fabricacion'
 
-  // Un calendario desconocido cae en Fabricación para que sus órdenes
-  // sigan siendo visibles en vez de desaparecer sin aviso.
-  return 'fabricacion'
-}
-
-// Reglas aprobadas, decididas con TODOS los puestos de la orden:
-//   solo Puesto 2                 → Corte
-//   Puesto 2 + fabricador         → Fabricación (ya fue cortada)
-//   David + fabricador            → Doblado
-//   fabricador sin David          → Fabricación
-export function etapaDeOrden (roles: Set<Etapa>): Etapa {
-  const fabrica = roles.has('fabricacion')
-  const dobla = roles.has('doblado')
-  if (dobla && fabrica) return 'doblado'
-  if (fabrica) return 'fabricacion'
-  if (dobla) return 'doblado'
-  return 'corte'
+// Un calendario desconocido cae en Fabricación para que sus órdenes
+// sigan siendo visibles en vez de desaparecer sin aviso.
+return 'fabricacion'
 }
 
 // Sub-secciones dentro de Fabricación, en el orden del mockup.
@@ -239,32 +225,21 @@ export function buildModelo ({
   const porTalonario = new Map<string, FacturaProduccion>()
   for (const f of facturas) if (f.talonario) porTalonario.set(f.talonario, f)
 
-  // 1. Etapa por orden — con TODOS sus puestos, no solo los del rango.
-  const roles = new Map<string, Set<Etapa>>()
-  for (const ev of eventos) {
-    if (!ev.orden) continue
-    let set = roles.get(ev.orden)
-    if (!set) { set = new Set(); roles.set(ev.orden, set) }
-    set.add(rolCalendario(ev.calendario))
-  }
-  const etapaPorOrden = new Map<string, Etapa>()
-  for (const [orden, rs] of roles) etapaPorOrden.set(orden, etapaDeOrden(rs))
-
-  // 2. Tarjetas dentro del rango visible.
+  // 1. Tarjetas: un evento por tarjeta. Cada evento se muestra en la
+  //    etapa de SU PROPIO calendario (sin fusionar calendarios por orden).
   const porEtapa: Record<Etapa, TarjetaOrden[]> = { corte: [], doblado: [], fabricacion: [] }
 
   eventos.forEach((ev, i) => {
-    if (!ev.orden) return
     const fecha = (ev.inicio || '').slice(0, 10)
     if (!fecha || fecha < rango.desde || fecha > rango.hasta) return
     if (q && !ev.orden.toLowerCase().includes(q)) return
 
-    const etapa = etapaPorOrden.get(ev.orden) ?? 'corte'
-    const factura = porTalonario.get(ev.orden) ?? null
+    const etapa = rolCalendario(ev.calendario)
+    const factura = ev.orden ? porTalonario.get(ev.orden) ?? null : null
     const dias = diasDesde(fecha, hoyISO)
 
     porEtapa[etapa].push({
-      key: `${ev.id || ev.orden}-${i}`,
+      key: `${ev.id || ev.orden || ev.titulo}-${i}`,
       orden: ev.orden,
       titulo: ev.pieza,
       fecha,
