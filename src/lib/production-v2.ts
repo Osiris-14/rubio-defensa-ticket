@@ -911,23 +911,9 @@ export interface FacturaProduccion {
   total: number
   total_pagado: number
   saldo: number
-  /** Nombres de los productos facturados (columna `productos` de la vista). */
-  productos: string[]
 }
 
-const SELECT_FACTURA = 'alegra_id, factura, talonario, cliente, vehiculo, fecha, total, total_pagado, saldo, productos'
-
-// `productos` viene como jsonb: [{ nombre, descripcion, cantidad }, …]
-function nombresProductos (raw: unknown): string[] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .map(p => {
-      if (typeof p === 'string') return p
-      const o = p as Record<string, unknown>
-      return String(o?.nombre ?? o?.descripcion ?? '').trim()
-    })
-    .filter(Boolean)
-}
+const SELECT_FACTURA = 'alegra_id, factura, talonario, cliente, vehiculo, fecha, total, total_pagado, saldo'
 
 export async function fetchFacturasProduccion (): Promise<FacturaProduccion[]> {
   return withSelfHeal(async () => {
@@ -949,7 +935,6 @@ export async function fetchFacturasProduccion (): Promise<FacturaProduccion[]> {
         total: Number(row.total ?? 0),
         total_pagado: Number(row.total_pagado ?? 0),
         saldo: Number(row.saldo ?? 0),
-        productos: nombresProductos(row.productos),
       }
     })
   })

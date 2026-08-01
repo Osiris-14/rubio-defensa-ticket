@@ -173,7 +173,6 @@ export function rangoDe (periodo: Periodo, hoy: Date): Rango {
 // ─────────────────────────────────────────────────────────
 export interface DatosAlegra {
   factura: string
-  productos: string[]
   total: number
   saldo: number
   pagada: boolean
@@ -283,7 +282,6 @@ export function buildModelo ({
       alegra: factura
         ? {
             factura: factura.factura,
-            productos: factura.productos,
             total: factura.total,
             saldo: factura.saldo,
             pagada: factura.saldo <= UMBRAL_SALDO,

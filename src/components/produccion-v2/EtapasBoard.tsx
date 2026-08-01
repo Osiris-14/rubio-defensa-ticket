@@ -237,10 +237,6 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
     .filter(Boolean)
     .join(' · ')
 
-  const productos = t.alegra?.productos ?? []
-  const visibles = productos.slice(0, 3)
-  const resto = productos.length - visibles.length
-
   return (
     <div style={{
       background: '#fff',
@@ -256,30 +252,12 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
         </div>
       )}
 
-      {/* 2. Orden + pieza */}
+      {/* 2. Orden + pieza — un evento de calendario = una orden */}
       <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', lineHeight: 1.35 }}>
         #{t.orden}{t.pieza ? ` · ${t.pieza}` : ''}
       </div>
 
-      {/* 3. Productos de Alegra */}
-      {visibles.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-          {visibles.map((p, i) => (
-            <span key={i} style={{
-              fontSize: 10, background: '#F7F7F7', color: '#666',
-              padding: '1px 6px', borderRadius: 4,
-              maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {p}
-            </span>
-          ))}
-          {resto > 0 && (
-            <span style={{ fontSize: 10, color: '#999', padding: '1px 2px' }}>+{resto} más</span>
-          )}
-        </div>
-      )}
-
-      {/* 4. Info */}
+      {/* 3. Info */}
       {info && (
         <div style={{ fontSize: 11, color: '#666', marginTop: 5, lineHeight: 1.35 }}>
           {info}
