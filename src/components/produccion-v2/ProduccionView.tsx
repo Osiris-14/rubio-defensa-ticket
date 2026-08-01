@@ -1,161 +1,121 @@
 'use client'
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
-import { Inbox, CheckCircle, ChevronRight, AlertCircle } from 'lucide-react'
-import {
-  fetchProductionKpis,
-  type ProductionKpis,
-} from '@/lib/production-v2'
-import { friendlyError } from '@/lib/errorMessages'
+import { useState, useCallback } from 'react'
+import { ChevronRight, Search, ArrowLeft } from 'lucide-react'
 import OrdenesTab from './OrdenesTab'
 import TicketsCompletadosTab from './TicketsCompletadosTab'
 
-type Tab = 'ordenes' | 'completados'
+type Vista = 'produccion' | 'completados'
 
 interface Props {
   user: { id: string; name: string; role: string }
 }
 
 export default function ProduccionView ({ user }: Props) {
-  const [tab, setTab] = useState<Tab>('ordenes')
-  const [kpis, setKpis] = useState<ProductionKpis | null>(null)
-  const [error, setError] = useState('')
+  const [vista, setVista] = useState<Vista>('produccion')
+  const [busqueda, setBusqueda] = useState('')
+  const [alertas, setAlertas] = useState(0)
   const [reloadKey, setReloadKey] = useState(0)
 
-  const reload = useCallback(() => {
-    setReloadKey(k => k + 1)
-  }, [])
-
-  useEffect(() => {
-    let active = true
-    async function load () {
-      try {
-        const k = await fetchProductionKpis()
-        if (active) { setKpis(k); setError('') }
-      } catch (e) {
-        if (active) setError(friendlyError(e))
-      }
-    }
-    load()
-    return () => { active = false }
-  }, [reloadKey])
+  const reload = useCallback(() => { setReloadKey(k => k + 1) }, [])
+  const handleAlertas = useCallback((n: number) => { setAlertas(n) }, [])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      {/* Header */}
+      {/* Migas */}
       <div className='workspace-header' style={{ padding: '24px 48px 0', flexShrink: 0 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
-          fontSize: 12, color: 'var(--gray-500)', fontWeight: 500, marginBottom: 16,
+          fontSize: 12, color: '#999', fontWeight: 500, marginBottom: 14,
         }}>
           <span>Operación</span>
-          <ChevronRight size={12} strokeWidth={2} style={{ color: 'var(--gray-400)' }} />
-          <span style={{ color: 'var(--gray-700)', fontWeight: 600 }}>Producción</span>
+          <ChevronRight size={12} strokeWidth={2} style={{ color: '#BBB' }} />
+          <span style={{ color: '#666', fontWeight: 600 }}>Producción</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' as const }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <h1 style={{
-              fontSize: 30, fontWeight: 700, color: 'var(--gray-900)',
-              letterSpacing: '-0.03em', lineHeight: 1.1, margin: 0,
-            }}>
-              Producción
-            </h1>
-            <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 8, lineHeight: 1.5, maxWidth: 620 }}>
-              Órdenes del calendario de los armadores por etapa: <strong>Corte</strong> → <strong>Doblado</strong> → <strong>Fabricación</strong>,
-              agrupadas por día dentro de cada etapa.
-            </p>
-          </div>
+        {/* ── Top bar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          flexWrap: 'wrap', marginBottom: 14,
+        }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1A1A1A' }}>
+            {vista === 'completados' ? 'Tickets completados' : 'Producción'}
+          </span>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-            {kpis && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 28, paddingTop: 4 }}>
-                <HeaderStat label='Órdenes' value={kpis.ordenes} />
-                <Divider />
-                <HeaderStat label='Completados' value={kpis.tickets_completados} />
-              </div>
+          {vista === 'produccion' && alertas > 0 && (
+            <span style={{
+              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 9999,
+              background: '#FDECEA', color: '#E8180A', whiteSpace: 'nowrap',
+            }}>
+              ⚠ {alertas} sin confirmar +2d
+            </span>
+          )}
+
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {vista === 'produccion' ? (
+              <>
+                <button
+                  onClick={() => setVista('completados')}
+                  style={{
+                    background: '#fff', border: '0.5px solid #ECECEC', color: '#666',
+                    fontSize: 11, padding: '6px 12px', borderRadius: 8,
+                    cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#1A1A1A' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#666' }}
+                >
+                  Ver completados →
+                </button>
+
+                <div style={{ position: 'relative' }}>
+                  <Search size={13} style={{
+                    position: 'absolute', left: 10, top: '50%',
+                    transform: 'translateY(-50%)', color: '#BBB',
+                  }} />
+                  <input
+                    value={busqueda}
+                    onChange={e => setBusqueda(e.target.value)}
+                    placeholder='Buscar orden...'
+                    style={{
+                      height: 30, paddingLeft: 30, paddingRight: 10, width: 170, fontSize: 12,
+                      background: '#F7F7F7', border: '0.5px solid #ECECEC', borderRadius: 8,
+                      color: '#1A1A1A', outline: 'none',
+                    }}
+                  />
+                </div>
+              </>
+            ) : (
+              <button
+                onClick={() => setVista('produccion')}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  background: '#fff', border: '0.5px solid #ECECEC', color: '#666',
+                  fontSize: 11, padding: '6px 12px', borderRadius: 8,
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                <ArrowLeft size={12} /> Volver a Producción
+              </button>
             )}
           </div>
         </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4, marginTop: 26, marginLeft: -4 }}>
-          <TabButton active={tab === 'ordenes'} onClick={() => setTab('ordenes')}>
-            <Inbox size={14} strokeWidth={1.75} /> Órdenes
-            {kpis && <TabCount count={kpis.ordenes} />}
-          </TabButton>
-          <TabButton active={tab === 'completados'} onClick={() => setTab('completados')}>
-            <CheckCircle size={14} strokeWidth={1.75} /> Tickets Completados
-            {kpis && <TabCount count={kpis.tickets_completados} />}
-          </TabButton>
-        </div>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, padding: '24px 48px 80px', overflowY: 'auto', overflowX: 'hidden' }}>
-        {error && (
-          <div style={{
-            background: 'var(--red-50)', border: '1px solid var(--red-ring)',
-            borderRadius: 'var(--radius-lg)', padding: '12px 16px',
-            marginBottom: 20, fontSize: 13.5, color: 'var(--red)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <AlertCircle size={16} /> {error}
+      {/* Contenido */}
+      <div style={{ flex: 1, padding: '0 48px 80px', overflowY: 'auto' }}>
+        {vista === 'produccion' ? (
+          <OrdenesTab
+            key={reloadKey}
+            user={user}
+            onChanged={reload}
+            busqueda={busqueda}
+            onAlertas={handleAlertas}
+          />
+        ) : (
+          <div style={{ paddingTop: 16 }}>
+            <TicketsCompletadosTab />
           </div>
         )}
-
-        {tab === 'ordenes' && <OrdenesTab user={user} onChanged={reload} />}
-        {tab === 'completados' && <TicketsCompletadosTab />}
       </div>
     </div>
   )
-}
-
-// ─────────────────────────────────────────────────────────
-function TabButton ({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 8,
-        padding: '12px 4px', marginRight: 24,
-        background: 'transparent', border: 'none',
-        borderBottom: active ? '2px solid var(--red)' : '2px solid transparent',
-        cursor: 'pointer', fontSize: 14, fontWeight: 600,
-        color: active ? 'var(--gray-900)' : 'var(--gray-500)',
-        letterSpacing: '-0.005em', transition: 'all var(--t-fast)', marginBottom: -1,
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-function TabCount ({ count, tone = 'neutral' }: { count: number; tone?: 'neutral' | 'danger' }) {
-  return (
-    <span style={{
-      fontSize: 11.5, fontWeight: 600,
-      color: tone === 'danger' ? 'var(--red)' : 'var(--gray-500)',
-      background: tone === 'danger' ? 'var(--red-50)' : 'var(--gray-100)',
-      padding: '1px 8px', borderRadius: 9999, minWidth: 22, textAlign: 'center' as const,
-    }}>
-      {count}
-    </span>
-  )
-}
-
-function HeaderStat ({ label, value }: { label: string; value: number }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-      <span style={{ fontSize: 10, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: 'var(--gray-900)', letterSpacing: '-0.02em' }}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function Divider () {
-  return <div style={{ width: 1, height: 32, background: 'var(--border)' }} />
 }

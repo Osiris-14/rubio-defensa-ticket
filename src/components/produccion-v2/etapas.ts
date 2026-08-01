@@ -1,32 +1,73 @@
 // ─────────────────────────────────────────────────────────
-// Modelo de presentación del tablero de etapas (Corte / Doblado / Fabricación).
-// Puro: no toca Supabase ni el calendario. Consume los EventoArmador que
-// OrdenesTab ya carga para "Proceso de armado".
+// Modelo de la vista Producción: pestañas por etapa
+// (Corte · Doblado · Fabricación), órdenes agrupadas por día y
+// filtro Día / Semana / Mes.
+//
+// Puro: no toca Supabase ni el calendario. Consume los EventoArmador
+// y las facturas que ya carga la vista.
 // ─────────────────────────────────────────────────────────
 import {
   fechaCompromisoDesdeDia,
   type EventoArmador,
-  type OrdenAlegra,
 } from '@/lib/ordenes-core'
+import { type FacturaProduccion } from '@/lib/production-v2'
 
 export type Etapa = 'corte' | 'doblado' | 'fabricacion'
+export type Periodo = 'dia' | 'semana' | 'mes'
 
 export const ETAPAS: Etapa[] = ['corte', 'doblado', 'fabricacion']
 
-// El calendario donde cae el evento define el rol; el rol del conjunto de
-// calendarios de la orden define en qué columna vive la orden.
-export function rolCalendario (calendario: string): Etapa {
-  const s = calendario.toUpperCase()
-  if (/\bDAVID\b/.test(s) || /\bP\s*-?\s*13\b/.test(s)) return 'doblado'
-  if (/PUESTO\s*2/.test(s)) return 'corte'
-  return 'fabricacion'
+// Umbral con el que la vista silver ya considera cerrada una factura.
+const UMBRAL_SALDO = 450
+
+export const DIAS_ALERTA = 2
+
+// ─────────────────────────────────────────────────────────
+// Nombres EXACTOS de los calendarios, dados por el dueño. No se
+// infieren desde las etiquetas de la UI ni por patrones sueltos.
+//
+// La comparación normaliza mayúsculas y espacios repetidos, porque el
+// CSV trae 'PUESTO 2 ARMADOR ' (espacio final) y
+// 'EVENNOT  PUESTO 4  5PM-9PM' (espacios dobles).
+// ─────────────────────────────────────────────────────────
+interface CalendarioConocido {
+  valor: string
+  etapa: Etapa
+  label: string
 }
 
-// Reglas aprobadas:
-//   solo Puesto 2                     → Corte
-//   Puesto 2 + fabricador             → Fabricación (ya fue cortada)
-//   David/P-13 + fabricador           → Doblado (David la dobló)
-//   fabricador sin David              → Fabricación (el fabricador la dobló)
+const CALENDARIOS: CalendarioConocido[] = [
+  // Corte
+  { valor: 'PUESTO 2 ARMADOR',         etapa: 'corte',       label: 'Puesto 2' },
+  // Doblado
+  { valor: 'P-13 DEIVI DOBLADOR',      etapa: 'doblado',     label: 'David (P-13)' },
+  { valor: 'DAVID P-13',               etapa: 'doblado',     label: 'David (P-13)' },
+  // Fabricación
+  { valor: 'ENCARGADO DE FABRICACION', etapa: 'fabricacion', label: 'Encargado de Fabricación' },
+  { valor: 'PUESTO 3 ARMADOR',         etapa: 'fabricacion', label: 'Puesto 3 Armador' },
+  { valor: 'PUESTO 3 FELIPE TRASER',   etapa: 'fabricacion', label: 'Puesto 3 Felipe' },
+  { valor: 'PUESTO 4 DE 8AM 4PM',      etapa: 'fabricacion', label: 'Puesto 4 día' },
+  { valor: 'EVENNOT PUESTO 4 5PM-9PM', etapa: 'fabricacion', label: 'Puesto 4 Noche' },
+  { valor: 'puesto 5 oscar',           etapa: 'fabricacion', label: 'Puesto 5 Oscar' },
+]
+
+function clave (calendario: string): string {
+  return calendario.toUpperCase().replace(/\s+/g, ' ').trim()
+}
+
+const POR_CLAVE = new Map(CALENDARIOS.map(c => [clave(c.valor), c]))
+
+export function rolCalendario (calendario: string): Etapa {
+  // Un calendario desconocido cae en Fabricación para que sus órdenes
+  // sigan siendo visibles en vez de desaparecer sin aviso.
+  return POR_CLAVE.get(clave(calendario))?.etapa ?? 'fabricacion'
+}
+
+// Reglas aprobadas, decididas con TODOS los puestos de la orden:
+//   solo Puesto 2                 → Corte
+//   Puesto 2 + fabricador         → Fabricación (ya fue cortada)
+//   David + fabricador            → Doblado
+//   fabricador sin David          → Fabricación
 export function etapaDeOrden (roles: Set<Etapa>): Etapa {
   const fabrica = roles.has('fabricacion')
   const dobla = roles.has('doblado')
@@ -36,29 +77,22 @@ export function etapaDeOrden (roles: Set<Etapa>): Etapa {
   return 'corte'
 }
 
-// Sub-secciones de Fabricación, en el orden del mockup. Los puestos que no
-// están en la lista (p. ej. Puesto 5) se muestran al final para no ocultar
-// órdenes que sí existen en el calendario.
+// Sub-secciones dentro de Fabricación, en el orden del mockup.
 const PUESTOS_ORDEN = [
   'Puesto 2',
   'Puesto 3 Armador',
-  'Puesto 3 Felipe (trasero)',
-  'Puesto 4 (8am-4pm)',
-  'Puesto 4 Noche (Evernot)',
+  'Puesto 3 Felipe',
+  'Puesto 4 día',
+  'Puesto 4 Noche',
+  'Encargado de Fabricación',
+  'Puesto 5 Oscar',
 ]
 
 export function labelPuesto (calendario: string): string {
-  const s = calendario.toUpperCase()
-  if (/EVE[NR]NOT/.test(s)) return 'Puesto 4 Noche (Evernot)'
-  if (/PUESTO\s*4\s*DE\s*8\s*AM/.test(s)) return 'Puesto 4 (8am-4pm)'
-  if (/PUESTO\s*4/.test(s)) return 'Puesto 4'
-  if (/PUESTO\s*3\s*FELIPE/.test(s)) return 'Puesto 3 Felipe (trasero)'
-  if (/PUESTO\s*3/.test(s)) return 'Puesto 3 Armador'
-  if (/PUESTO\s*2/.test(s)) return 'Puesto 2'
-  if (/PUESTO\s*5/.test(s)) return 'Puesto 5 (Oscar)'
-  if (/\bDAVID\b/.test(s) || /\bP\s*-?\s*13\b/.test(s)) return 'David (P-13)'
+  const conocido = POR_CLAVE.get(clave(calendario))
+  if (conocido) return conocido.label
   const limpio = calendario.replace(/\s+/g, ' ').trim()
-  return limpio.length > 26 ? `${limpio.slice(0, 26)}…` : limpio
+  return limpio.length > 24 ? `${limpio.slice(0, 24)}…` : limpio
 }
 
 function pesoPuesto (label: string): number {
@@ -82,34 +116,80 @@ function diasDesde (fechaISO: string, hoyISO: string): number {
 }
 
 const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
-// "Hoy · 31" · "Vie · 1" · "Sáb · 2 ago" (el mes solo cuando no es el actual).
+// "Hoy · 31" · "Dom · 28"
 export function labelDia (fechaISO: string, hoyISO: string): string {
   const d = new Date(`${fechaISO}T00:00:00`)
   if (Number.isNaN(d.getTime())) return fechaISO
   const dia = d.getDate()
   if (fechaISO === hoyISO) return `Hoy · ${dia}`
-  const mismoMes = fechaISO.slice(0, 7) === hoyISO.slice(0, 7)
-  const mes = mismoMes ? '' : ` ${MESES[d.getMonth()]}`
-  return `${DIAS_SEMANA[d.getDay()]} · ${dia}${mes}`
+  return `${DIAS_SEMANA[d.getDay()]} · ${dia}`
 }
 
-// Umbral de alerta: la fecha del calendario quedó a más de 2 días.
-export const DIAS_ALERTA = 2
+// ─────────────────────────────────────────────────────────
+export interface Rango {
+  desde: string
+  hasta: string
+  /** "Hoy · 1 agosto 2026" · "Semana 27 jul – 2 ago" · "Agosto 2026" */
+  label: string
+}
+
+export function rangoDe (periodo: Periodo, hoy: Date): Rango {
+  if (periodo === 'dia') {
+    const iso = isoLocal(hoy)
+    return {
+      desde: iso,
+      hasta: iso,
+      label: `Hoy · ${hoy.getDate()} ${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`,
+    }
+  }
+
+  if (periodo === 'semana') {
+    const dow = (hoy.getDay() + 6) % 7 // lunes = 0
+    const lunes = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - dow)
+    const domingo = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + 6)
+    return {
+      desde: isoLocal(lunes),
+      hasta: isoLocal(domingo),
+      label: `Semana ${lunes.getDate()} ${MESES_CORTO[lunes.getMonth()]} – ${domingo.getDate()} ${MESES_CORTO[domingo.getMonth()]}`,
+    }
+  }
+
+  const primero = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+  const ultimo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
+  const nombre = MESES_LARGO[hoy.getMonth()]
+  return {
+    desde: isoLocal(primero),
+    hasta: isoLocal(ultimo),
+    label: `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${hoy.getFullYear()}`,
+  }
+}
 
 // ─────────────────────────────────────────────────────────
+export interface DatosAlegra {
+  factura: string
+  productos: string[]
+  total: number
+  saldo: number
+  pagada: boolean
+}
+
 export interface TarjetaOrden {
   key: string
   orden: string
   pieza: string
   fecha: string
   puesto: string
+  puestoLabel: string
   vehiculo: string | null
   cliente: string | null
   compromiso: string | null
   dias: number
   alerta: boolean
+  /** null = la orden no casó con ninguna factura de Alegra. */
+  alegra: DatosAlegra | null
 }
 
 export interface GrupoPuesto {
@@ -121,82 +201,98 @@ export interface GrupoDia {
   fecha: string
   label: string
   esHoy: boolean
+  ordenes: number
   tarjetas: TarjetaOrden[]
   puestos: GrupoPuesto[]
 }
 
-export interface ColumnaEtapa {
+export interface DatosEtapa {
   etapa: Etapa
   dias: GrupoDia[]
   ordenes: number
   alertas: number
 }
 
-export interface EtapasModel {
-  columnas: ColumnaEtapa[]
-  totalOrdenes: number
+export interface ModeloProduccion {
+  etapas: Record<Etapa, DatosEtapa>
+  rango: Rango
   totalAlertas: number
 }
 
 interface BuildParams {
   eventos: EventoArmador[]
-  ordenesMap: Map<string, OrdenAlegra>
+  facturas: FacturaProduccion[]
   compromisos: Map<string, string>
   hoy: Date
   confirmadas: Set<string>
+  periodo: Periodo
   filtro?: string
 }
 
-export function buildEtapasModel ({
-  eventos, ordenesMap, compromisos, hoy, confirmadas, filtro = '',
-}: BuildParams): EtapasModel {
+export function buildModelo ({
+  eventos, facturas, compromisos, hoy, confirmadas, periodo, filtro = '',
+}: BuildParams): ModeloProduccion {
   const hoyISO = isoLocal(hoy)
+  const rango = rangoDe(periodo, hoy)
   const q = filtro.trim().toLowerCase()
 
-  // 1. Calendarios en los que aparece cada orden → etapa de la orden.
-  const rolesPorOrden = new Map<string, Set<Etapa>>()
+  // Factura por número de orden (talonario).
+  const porTalonario = new Map<string, FacturaProduccion>()
+  for (const f of facturas) if (f.talonario) porTalonario.set(f.talonario, f)
+
+  // 1. Etapa por orden — con TODOS sus puestos, no solo los del rango.
+  const roles = new Map<string, Set<Etapa>>()
   for (const ev of eventos) {
     if (!ev.orden) continue
-    let roles = rolesPorOrden.get(ev.orden)
-    if (!roles) { roles = new Set(); rolesPorOrden.set(ev.orden, roles) }
-    roles.add(rolCalendario(ev.calendario))
+    let set = roles.get(ev.orden)
+    if (!set) { set = new Set(); roles.set(ev.orden, set) }
+    set.add(rolCalendario(ev.calendario))
   }
   const etapaPorOrden = new Map<string, Etapa>()
-  for (const [orden, roles] of rolesPorOrden) etapaPorOrden.set(orden, etapaDeOrden(roles))
+  for (const [orden, rs] of roles) etapaPorOrden.set(orden, etapaDeOrden(rs))
 
-  // 2. Una tarjeta por evento, pero solo los eventos del calendario que
-  //    corresponde a la etapa donde vive la orden (así no se duplica).
-  const tarjetas: Record<Etapa, TarjetaOrden[]> = { corte: [], doblado: [], fabricacion: [] }
+  // 2. Tarjetas dentro del rango visible.
+  const porEtapa: Record<Etapa, TarjetaOrden[]> = { corte: [], doblado: [], fabricacion: [] }
+
   eventos.forEach((ev, i) => {
     if (!ev.orden) return
-    const etapa = etapaPorOrden.get(ev.orden)
-    if (!etapa || rolCalendario(ev.calendario) !== etapa) return
+    const fecha = (ev.inicio || '').slice(0, 10)
+    if (!fecha || fecha < rango.desde || fecha > rango.hasta) return
     if (q && !ev.orden.toLowerCase().includes(q)) return
 
-    const fecha = (ev.inicio || '').slice(0, 10)
-    if (!fecha) return
-
-    const alegra = ordenesMap.get(ev.orden)
+    const etapa = etapaPorOrden.get(ev.orden) ?? 'corte'
+    const factura = porTalonario.get(ev.orden) ?? null
     const compCal = ev.dia != null ? fechaCompromisoDesdeDia(ev.dia, hoy) : null
     const dias = diasDesde(fecha, hoyISO)
 
-    tarjetas[etapa].push({
+    porEtapa[etapa].push({
       key: `${ev.id || ev.orden}-${i}`,
       orden: ev.orden,
       pieza: ev.pieza,
       fecha,
-      puesto: labelPuesto(ev.calendario),
-      vehiculo: alegra?.vehiculo ?? null,
-      cliente: alegra?.cliente ?? null,
+      puesto: ev.calendario,
+      puestoLabel: labelPuesto(ev.calendario),
+      vehiculo: factura?.vehiculo ?? null,
+      cliente: factura?.cliente ?? null,
       compromiso: compCal ?? compromisos.get(ev.orden) ?? null,
       dias,
       alerta: dias > DIAS_ALERTA && !confirmadas.has(ev.orden),
+      alegra: factura
+        ? {
+            factura: factura.factura,
+            productos: factura.productos,
+            total: factura.total,
+            saldo: factura.saldo,
+            pagada: factura.saldo <= UMBRAL_SALDO,
+          }
+        : null,
     })
   })
 
   // 3. Agrupar por día (y por puesto dentro del día en Fabricación).
-  const columnas = ETAPAS.map<ColumnaEtapa>(etapa => {
-    const lista = tarjetas[etapa]
+  const etapas = {} as Record<Etapa, DatosEtapa>
+  for (const etapa of ETAPAS) {
+    const lista = porEtapa[etapa]
     const porDia = new Map<string, TarjetaOrden[]>()
     for (const t of lista) {
       const arr = porDia.get(t.fecha)
@@ -212,29 +308,26 @@ export function buildEtapasModel ({
           fecha,
           label: labelDia(fecha, hoyISO),
           esHoy: fecha === hoyISO,
+          ordenes: new Set(lote.map(t => t.orden)).size,
           tarjetas: lote,
           puestos: etapa === 'fabricacion' ? agrupaPorPuesto(lote) : [],
         }
       })
 
-    return {
+    etapas[etapa] = {
       etapa,
       dias,
       ordenes: new Set(lista.map(t => t.orden)).size,
       alertas: new Set(lista.filter(t => t.alerta).map(t => t.orden)).size,
     }
-  })
-
-  const ordenesUnicas = new Set<string>()
-  const alertasUnicas = new Set<string>()
-  for (const etapa of ETAPAS) {
-    for (const t of tarjetas[etapa]) {
-      ordenesUnicas.add(t.orden)
-      if (t.alerta) alertasUnicas.add(t.orden)
-    }
   }
 
-  return { columnas, totalOrdenes: ordenesUnicas.size, totalAlertas: alertasUnicas.size }
+  const alertasUnicas = new Set<string>()
+  for (const etapa of ETAPAS) {
+    for (const t of porEtapa[etapa]) if (t.alerta) alertasUnicas.add(t.orden)
+  }
+
+  return { etapas, rango, totalAlertas: alertasUnicas.size }
 }
 
 function comparaTarjetas (a: TarjetaOrden, b: TarjetaOrden): number {
@@ -245,9 +338,9 @@ function comparaTarjetas (a: TarjetaOrden, b: TarjetaOrden): number {
 function agrupaPorPuesto (tarjetas: TarjetaOrden[]): GrupoPuesto[] {
   const mapa = new Map<string, TarjetaOrden[]>()
   for (const t of tarjetas) {
-    const arr = mapa.get(t.puesto)
+    const arr = mapa.get(t.puestoLabel)
     if (arr) arr.push(t)
-    else mapa.set(t.puesto, [t])
+    else mapa.set(t.puestoLabel, [t])
   }
   return [...mapa.entries()]
     .map<GrupoPuesto>(([puesto, lote]) => ({ puesto, tarjetas: lote }))

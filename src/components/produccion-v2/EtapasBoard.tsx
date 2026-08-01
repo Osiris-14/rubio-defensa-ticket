@@ -1,227 +1,226 @@
 'use client'
 // ─────────────────────────────────────────────────────────
-// Tablero híbrido de producción: 3 columnas por etapa
-// (Corte · Doblado · Fabricación) y, dentro de cada columna,
-// las órdenes agrupadas por día como las muestra Google Calendar.
-// Solo presentación: el modelo llega ya construido desde etapas.ts.
+// Vista Producción: pestañas por etapa (Corte · Doblado · Fabricación),
+// filtro Día/Semana/Mes y órdenes agrupadas por día.
+// Solo presentación: el modelo llega construido desde etapas.ts.
 // ─────────────────────────────────────────────────────────
-import { useEffect, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
-import { formatoCorto } from '@/lib/ordenes-core'
-import type { ColumnaEtapa, Etapa, GrupoDia, TarjetaOrden } from './etapas'
+import type {
+  DatosEtapa, Etapa, GrupoDia, ModeloProduccion, Periodo, TarjetaOrden,
+} from './etapas'
+import { ETAPAS } from './etapas'
 
 const ROJO = '#E8180A'
 
 interface Tema {
   titulo: string
-  icono: string | null
-  subtitulo: string | null
-  headerBg: string
-  headerText: string
-  headerBorder: string
-  diaBg: string
-  cardBorder: string
+  icono: string
+  /** Fondo de la pestaña activa. */
+  bg: string
+  /** Color del texto de la pestaña. */
+  text: string
+  /** Acento: subrayado activo, borde izquierdo de tarjeta, filtro activo. */
   accent: string
+  /** Borde suave de tarjetas y línea del día. */
+  linea: string
 }
 
 const TEMAS: Record<Etapa, Tema> = {
-  corte: {
-    titulo: 'Corte',
-    icono: '✂',
-    subtitulo: null,
-    headerBg: '#FAEEDA',
-    headerText: '#633806',
-    headerBorder: '#F0D9A0',
-    diaBg: '#fff8f0',
-    cardBorder: '#F0D9A0',
-    accent: '#D19A2E',
-  },
-  doblado: {
-    titulo: 'Doblado',
-    icono: null,
-    subtitulo: 'David',
-    headerBg: '#E6F1FB',
-    headerText: '#0C447C',
-    headerBorder: '#B8D4F0',
-    diaBg: '#f0f6fd',
-    cardBorder: '#B8D4F0',
-    accent: '#3B82C4',
-  },
-  fabricacion: {
-    titulo: 'Fabricación',
-    icono: '🔧',
-    subtitulo: null,
-    headerBg: '#EAF3DE',
-    headerText: '#3B6D11',
-    headerBorder: '#C4DFA0',
-    diaBg: '#f4faf0',
-    cardBorder: '#C4DFA0',
-    accent: '#7BAE3E',
-  },
+  corte:       { titulo: 'Corte',       icono: '✂',  bg: '#FAEEDA', text: '#633806', accent: '#997022', linea: '#F0D9A0' },
+  doblado:     { titulo: 'Doblado',     icono: '〰', bg: '#E6F1FB', text: '#0C447C', accent: '#0C447C', linea: '#B8D4F0' },
+  fabricacion: { titulo: 'Fabricación', icono: '🔧', bg: '#EAF3DE', text: '#3B6D11', accent: '#3B6D11', linea: '#C4DFA0' },
 }
+
+const PERIODOS: { id: Periodo; label: string }[] = [
+  { id: 'dia', label: 'Día' },
+  { id: 'semana', label: 'Semana' },
+  { id: 'mes', label: 'Mes' },
+]
 
 interface Props {
-  columnas: ColumnaEtapa[]
+  modelo: ModeloProduccion
+  etapaActiva: Etapa
+  onEtapa: (e: Etapa) => void
+  periodo: Periodo
+  onPeriodo: (p: Periodo) => void
   confirmando: string | null
-  onConfirmar: (tarjeta: TarjetaOrden) => void
+  onConfirmar: (t: TarjetaOrden) => void
 }
 
-export default function EtapasBoard ({ columnas, confirmando, onConfirmar }: Props) {
-  const esMovil = useEsMovil()
-  const [colapsadas, setColapsadas] = useState<Set<Etapa>>(new Set())
-
-  function toggle (etapa: Etapa) {
-    setColapsadas(prev => {
-      const next = new Set(prev)
-      if (next.has(etapa)) next.delete(etapa)
-      else next.add(etapa)
-      return next
-    })
-  }
+export default function EtapasBoard ({
+  modelo, etapaActiva, onEtapa, periodo, onPeriodo, confirmando, onConfirmar,
+}: Props) {
+  const tema = TEMAS[etapaActiva]
+  const datos = modelo.etapas[etapaActiva]
 
   return (
-    <div className='etapas-board'>
-      {columnas.map(col => (
-        <Columna
-          key={col.etapa}
-          columna={col}
-          esMovil={esMovil}
-          colapsada={esMovil && colapsadas.has(col.etapa)}
-          onToggle={() => toggle(col.etapa)}
-          confirmando={confirmando}
-          onConfirmar={onConfirmar}
-        />
-      ))}
+    <div>
+      {/* ── Pestañas */}
+      <div className='etapa-tabs' role='tablist' style={{
+        display: 'flex', borderBottom: '2px solid #ECECEC', overflowX: 'auto',
+      }}>
+        {ETAPAS.map(e => (
+          <TabEtapa
+            key={e}
+            etapa={e}
+            activa={e === etapaActiva}
+            datos={modelo.etapas[e]}
+            onClick={() => onEtapa(e)}
+          />
+        ))}
+      </div>
+
+      {/* ── Barra de filtro */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        background: '#FAFAFA', border: '0.5px solid #ECECEC', borderTop: 'none',
+        padding: '8px 14px',
+      }}>
+        <span style={{ fontSize: 11, color: '#999' }}>Ver:</span>
+        {PERIODOS.map(p => {
+          const activo = p.id === periodo
+          return (
+            <button
+              key={p.id}
+              onClick={() => onPeriodo(p.id)}
+              style={{
+                fontSize: 11, padding: '3px 11px', borderRadius: 20, cursor: 'pointer',
+                background: activo ? tema.accent : '#fff',
+                color: activo ? '#fff' : '#666',
+                border: activo ? `0.5px solid ${tema.accent}` : '0.5px solid #ECECEC',
+                fontWeight: activo ? 600 : 500,
+                transition: 'all 0.15s', whiteSpace: 'nowrap',
+              }}
+            >
+              {p.label}
+            </button>
+          )
+        })}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#999', whiteSpace: 'nowrap' }}>
+          {modelo.rango.label}
+        </span>
+      </div>
+
+      {/* ── Contenido */}
+      <div style={{ paddingTop: 16 }}>
+        {datos.dias.length === 0 ? (
+          <div style={{ padding: '48px 24px', textAlign: 'center', fontSize: 13, color: '#999' }}>
+            No hay órdenes en {tema.titulo.toLowerCase()} para {modelo.rango.label.toLowerCase()}.
+          </div>
+        ) : (
+          datos.dias.map(dia => (
+            <SeccionDia
+              key={dia.fecha}
+              dia={dia}
+              tema={tema}
+              conPuestos={etapaActiva === 'fabricacion'}
+              confirmando={confirmando}
+              onConfirmar={onConfirmar}
+            />
+          ))
+        )}
+      </div>
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────
-function Columna ({ columna, esMovil, colapsada, onToggle, confirmando, onConfirmar }: {
-  columna: ColumnaEtapa
-  esMovil: boolean
-  colapsada: boolean
-  onToggle: () => void
-  confirmando: string | null
-  onConfirmar: (tarjeta: TarjetaOrden) => void
+function TabEtapa ({ etapa, activa, datos, onClick }: {
+  etapa: Etapa
+  activa: boolean
+  datos: DatosEtapa
+  onClick: () => void
 }) {
-  const tema = TEMAS[columna.etapa]
-
+  const t = TEMAS[etapa]
   return (
-    <section
-      className={`etapa-col etapa-col--${columna.etapa}`}
+    <button
+      onClick={onClick}
+      role='tab'
+      aria-selected={activa}
       style={{
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-        background: '#fff',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        minWidth: 0,
+        display: 'inline-flex', alignItems: 'center', gap: 7,
+        padding: '9px 16px', marginBottom: -2, flexShrink: 0,
+        background: activa ? t.bg : '#fff',
+        color: t.text,
+        opacity: activa ? 1 : 0.55,
+        border: 'none',
+        borderBottom: `2px solid ${activa ? t.accent : 'transparent'}`,
+        borderRadius: '8px 8px 0 0',
+        cursor: 'pointer', fontSize: 13, fontWeight: 600,
+        transition: 'all 0.15s', whiteSpace: 'nowrap',
       }}
     >
-      {/* Cabecera de columna */}
-      <button
-        type='button'
-        onClick={esMovil ? onToggle : undefined}
-        aria-expanded={esMovil ? !colapsada : undefined}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-          padding: '10px 12px', border: 'none',
-          borderBottom: `1px solid ${tema.headerBorder}`,
-          background: tema.headerBg, color: tema.headerText,
-          cursor: esMovil ? 'pointer' : 'default', textAlign: 'left',
-          font: 'inherit',
-        }}
-      >
-        {tema.icono && <span style={{ fontSize: 13, lineHeight: 1 }}>{tema.icono}</span>}
-        <span style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '-0.005em' }}>
-          {tema.titulo}
-        </span>
-        {tema.subtitulo && (
-          <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7 }}>· {tema.subtitulo}</span>
-        )}
-        <span style={{
-          marginLeft: 'auto', fontSize: 10.5, fontWeight: 700,
-          padding: '1px 7px', borderRadius: 9999,
-          background: 'rgba(255,255,255,0.65)', color: tema.headerText,
-        }}>
-          {columna.ordenes}
-        </span>
-        {esMovil && (
-          <ChevronDown
-            size={14}
-            style={{ transform: colapsada ? 'rotate(-90deg)' : 'none', transition: 'transform 0.15s' }}
-          />
-        )}
-      </button>
-
-      {!colapsada && (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {columna.dias.length === 0 ? (
-            <div style={{ padding: '22px 12px', textAlign: 'center', fontSize: 11.5, color: 'var(--gray-400)' }}>
-              Sin órdenes
-            </div>
-          ) : (
-            columna.dias.map(dia => (
-              <Dia
-                key={dia.fecha}
-                dia={dia}
-                tema={tema}
-                conPuestos={columna.etapa === 'fabricacion'}
-                confirmando={confirmando}
-                onConfirmar={onConfirmar}
-              />
-            ))
-          )}
-        </div>
-      )}
-    </section>
+      <span style={{ fontSize: 12 }}>{t.icono}</span>
+      {t.titulo}
+      <span style={{
+        fontSize: 10, fontWeight: 700, minWidth: 18, textAlign: 'center',
+        padding: '1px 6px', borderRadius: 10,
+        background: activa
+          ? (etapa === 'corte' ? t.accent : '#fff')
+          : t.bg,
+        color: activa
+          ? (etapa === 'corte' ? '#fff' : t.text)
+          : t.text,
+      }}>
+        {datos.ordenes}
+      </span>
+    </button>
   )
 }
 
 // ─────────────────────────────────────────────────────────
-function Dia ({ dia, tema, conPuestos, confirmando, onConfirmar }: {
+function SeccionDia ({ dia, tema, conPuestos, confirmando, onConfirmar }: {
   dia: GrupoDia
   tema: Tema
   conPuestos: boolean
   confirmando: string | null
-  onConfirmar: (tarjeta: TarjetaOrden) => void
+  onConfirmar: (t: TarjetaOrden) => void
 }) {
   return (
-    <div>
-      {/* Banda del día */}
-      <div style={{
-        padding: '5px 12px',
-        background: dia.esHoy ? tema.diaBg : '#fafafa',
-        color: dia.esHoy ? tema.headerText : '#999',
-        borderTop: '1px solid var(--border-subtle, #f0f0f0)',
-        borderBottom: '1px solid var(--border-subtle, #f0f0f0)',
-        fontSize: 10, fontWeight: 700,
-        textTransform: 'uppercase', letterSpacing: '0.4px',
-      }}>
-        {dia.label}
+    <div style={{ marginBottom: 20 }}>
+      {/* Cabecera del día: etiqueta + línea + conteo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <span style={{
+          fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.5px', color: tema.accent, whiteSpace: 'nowrap',
+        }}>
+          {dia.label}
+        </span>
+        <span style={{ flex: 1, height: 1, background: tema.linea }} />
+        <span style={{ fontSize: 10, color: tema.accent, whiteSpace: 'nowrap' }}>
+          {dia.ordenes} {dia.ordenes === 1 ? 'orden' : 'órdenes'}
+        </span>
       </div>
 
-      <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {conPuestos
-          ? dia.puestos.map(gp => (
-            <div key={gp.puesto} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{
-                fontSize: 10, fontWeight: 700, color: '#999',
-                textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 2,
-              }}>
-                · {gp.puesto}
-              </div>
-              {gp.tarjetas.map(t => (
-                <Tarjeta key={t.key} t={t} tema={tema} confirmando={confirmando} onConfirmar={onConfirmar} />
-              ))}
+      {conPuestos ? (
+        dia.puestos.map(gp => (
+          <div key={gp.puesto} style={{ marginBottom: 12 }}>
+            <div style={{
+              fontSize: 10, fontWeight: 700, color: '#999',
+              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6,
+            }}>
+              · {gp.puesto}
             </div>
-          ))
-          : dia.tarjetas.map(t => (
-            <Tarjeta key={t.key} t={t} tema={tema} confirmando={confirmando} onConfirmar={onConfirmar} />
-          ))}
-      </div>
+            <GridTarjetas tarjetas={gp.tarjetas} tema={tema} confirmando={confirmando} onConfirmar={onConfirmar} />
+          </div>
+        ))
+      ) : (
+        <GridTarjetas tarjetas={dia.tarjetas} tema={tema} confirmando={confirmando} onConfirmar={onConfirmar} />
+      )}
+    </div>
+  )
+}
+
+function GridTarjetas ({ tarjetas, tema, confirmando, onConfirmar }: {
+  tarjetas: TarjetaOrden[]
+  tema: Tema
+  confirmando: string | null
+  onConfirmar: (t: TarjetaOrden) => void
+}) {
+  return (
+    <div className='orden-grid'>
+      {tarjetas.map(t => (
+        <Tarjeta key={t.key} t={t} tema={tema} confirmando={confirmando} onConfirmar={onConfirmar} />
+      ))}
     </div>
   )
 }
@@ -231,47 +230,93 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
   t: TarjetaOrden
   tema: Tema
   confirmando: string | null
-  onConfirmar: (tarjeta: TarjetaOrden) => void
+  onConfirmar: (t: TarjetaOrden) => void
 }) {
   const enCurso = confirmando === t.orden
-  const meta = [t.vehiculo, t.cliente ?? t.puesto, t.compromiso ? formatoCorto(t.compromiso) : null]
+  const info = [t.vehiculo, t.cliente, t.compromiso ? formatoCorto(t.compromiso) : null]
     .filter(Boolean)
     .join(' · ')
+
+  const productos = t.alegra?.productos ?? []
+  const visibles = productos.slice(0, 3)
+  const resto = productos.length - visibles.length
 
   return (
     <div style={{
       background: '#fff',
-      border: `0.5px solid ${tema.cardBorder}`,
+      border: `0.5px solid ${tema.linea}`,
       borderLeft: `3px solid ${t.alerta ? ROJO : tema.accent}`,
-      borderRadius: 7,
-      padding: '8px 10px',
+      borderRadius: 8,
+      padding: '10px 12px',
     }}>
+      {/* 1. Alerta */}
       {t.alerta && (
-        <div style={{ fontSize: 10, fontWeight: 700, color: ROJO, marginBottom: 3 }}>
-          ⚠ {t.dias} días
+        <div style={{ fontSize: 10, fontWeight: 600, color: ROJO, marginBottom: 4 }}>
+          ⚠ {t.dias} días sin confirmar
         </div>
       )}
 
-      <div style={{ fontSize: 12, color: 'var(--gray-700, #444)', lineHeight: 1.35 }}>
-        <span style={{ fontWeight: 700, color: '#1A1A1A' }}>{t.orden}</span>
-        {t.pieza && <> · {t.pieza}</>}
+      {/* 2. Orden + pieza */}
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', lineHeight: 1.35 }}>
+        #{t.orden}{t.pieza ? ` · ${t.pieza}` : ''}
       </div>
 
-      {meta && (
-        <div style={{ fontSize: 11, color: '#666', marginTop: 2, lineHeight: 1.35 }}>
-          {meta}
+      {/* 3. Productos de Alegra */}
+      {visibles.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+          {visibles.map((p, i) => (
+            <span key={i} style={{
+              fontSize: 10, background: '#F7F7F7', color: '#666',
+              padding: '1px 6px', borderRadius: 4,
+              maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {p}
+            </span>
+          ))}
+          {resto > 0 && (
+            <span style={{ fontSize: 10, color: '#999', padding: '1px 2px' }}>+{resto} más</span>
+          )}
         </div>
       )}
 
+      {/* 4. Info */}
+      {info && (
+        <div style={{ fontSize: 11, color: '#666', marginTop: 5, lineHeight: 1.35 }}>
+          {info}
+        </div>
+      )}
+
+      {/* 5. Estado de pago — se omite si no hay match en Alegra */}
+      {t.alegra && (
+        <div style={{ marginTop: 6 }}>
+          {t.alegra.pagada ? (
+            <span style={{
+              fontSize: 10, padding: '2px 8px', borderRadius: 10,
+              background: '#EAF3DE', color: '#3B6D11', fontWeight: 600,
+            }}>
+              ✓ Pagada
+            </span>
+          ) : (
+            <span style={{
+              fontSize: 10, padding: '2px 8px', borderRadius: 10,
+              background: '#FDECEA', color: ROJO, fontWeight: 600,
+            }}>
+              Pendiente · {formatoMoneda(t.alegra.saldo)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 6. Confirmar salida — solo en alertas */}
       {t.alerta && (
         <button
           type='button'
           onClick={() => onConfirmar(t)}
           disabled={enCurso}
           style={{
-            marginTop: 7, width: '100%', padding: '5px 8px',
+            marginTop: 6, width: '100%', padding: '5px 8px',
             background: ROJO, color: '#fff', border: 'none', borderRadius: 5,
-            fontSize: 10, fontWeight: 700, cursor: enCurso ? 'default' : 'pointer',
+            fontSize: 10, fontWeight: 600, cursor: enCurso ? 'default' : 'pointer',
             opacity: enCurso ? 0.6 : 1,
           }}
         >
@@ -283,14 +328,11 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
 }
 
 // ─────────────────────────────────────────────────────────
-function useEsMovil (): boolean {
-  const [esMovil, setEsMovil] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)')
-    const sync = () => setEsMovil(mq.matches)
-    sync()
-    mq.addEventListener('change', sync)
-    return () => mq.removeEventListener('change', sync)
-  }, [])
-  return esMovil
+function formatoCorto (fechaISO: string): string {
+  const [, m, d] = fechaISO.split('-')
+  return `${d}/${m}`
+}
+
+function formatoMoneda (n: number): string {
+  return `RD$ ${new Intl.NumberFormat('es-DO', { maximumFractionDigits: 0 }).format(Math.round(n))}`
 }
