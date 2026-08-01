@@ -75,6 +75,24 @@ export function parseEventoArmador (titulo: string): { pieza: string; orden: str
 
   if (/\bORDEN\b/i.test(up) || /\dORDEN/i.test(up)) return null
 
+  // Formato de producción (Doblado/Deivi): la orden va al INICIO del
+  // título, con prefijo opcional "C.D", p.ej. "3040 KIA COMPLETO",
+  // "2068 HIJET COMPLETA" o "C.D 3033 KIA COMPLETO". Se evalúa después
+  // de los formatos con "ORDEN" para no cambiar lo que ya funcionaba.
+  const leadMatch = t.match(/^(?:C\.?\s*D\.?\s*)?0*(\d{3,4})\s+(.+)$/i)
+  if (leadMatch) {
+    const leadDiaMatch = up.match(/\bDIA\s*(\d{1,2})\b/)
+    const pieza = leadMatch[2]
+      .replace(/\bDIA\s*\d{1,2}\b/gi, '')
+      .replace(/[\s\-:;,]+$/, '')
+      .trim()
+    return {
+      pieza: pieza || t,
+      orden: normalizarOrden(leadMatch[1]),
+      dia: leadDiaMatch != null ? parseInt(leadDiaMatch[1], 10) : null,
+    }
+  }
+
   const diaMatch = up.match(/\bDIA\s*(\d{1,2})\b/)
   const dia = diaMatch != null ? parseInt(diaMatch[1], 10) : null
   const sinDia = up.replace(/\bDIA\s*\d{1,2}\b/g, '').replace(/[\s\-:;,]+$/, '')
