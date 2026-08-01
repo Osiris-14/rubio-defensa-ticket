@@ -611,6 +611,27 @@ input[type="date"].input-base { color: var(--gray-700); }
 }
 
 /* ─────────────────────────────────────────────────────────
+   Agenda de producción: tablero operativo por puesto
+   Desktop: columnas horizontales con scroll.
+   Móvil: columnas apiladas verticalmente.
+   ───────────────────────────────────────────────────────── */
+
+.agenda-board { -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 768px) {
+  .agenda-board {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: visible;
+  }
+  .agenda-column {
+    flex: 1 1 auto !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
    Mobile (≤768px)
    ───────────────────────────────────────────────────────── */
 

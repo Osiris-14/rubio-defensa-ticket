@@ -7,10 +7,11 @@ import {
 import { AREA_THEME } from '@/lib/areaTheme'
 import { type AppUser, type UserRole, ROLE_LABELS, ROLE_COLORS, getTickets, ticketsToCSV } from '@/lib/store'
 import {
-  fetchProductionKpis, fetchCapacityDashboard, fetchAreaCapacities,
-  PRODUCTION_STEPS, STEP_LABELS, occupancyLevel,
-  type ProductionKpis, type CapacityDashboard, type AreaCapacity,
+  fetchProductionKpis, fetchCapacityDashboard, fetchPuestosCapacidad,
+  type ProductionKpis, type CapacityDashboard, type PuestoCapacidad,
 } from '@/lib/production-v2'
+import { fetchEventosArmador } from '@/lib/ordenes'
+import { type EventoArmador } from '@/lib/ordenes-core'
 import QuickActions, { type DashboardView } from './QuickActions'
 import MiniCalendarWidget from './MiniCalendarWidget'
 import AttentionWidget from './AttentionWidget'
@@ -30,7 +31,8 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
   const [areaData, setAreaData] = useState<AreaDatum[]>([])
   const [prodKpis, setProdKpis] = useState<ProductionKpis | null>(null)
   const [capKpis, setCapKpis] = useState<CapacityDashboard | null>(null)
-  const [areaCaps, setAreaCaps] = useState<AreaCapacity[]>([])
+  const [puestos, setPuestos] = useState<PuestoCapacidad[]>([])
+  const [eventos, setEventos] = useState<EventoArmador[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -85,12 +87,14 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
     Promise.allSettled([
       fetchProductionKpis(),
       fetchCapacityDashboard(),
-      fetchAreaCapacities(),
-    ]).then(([k, c, ac]) => {
+      fetchPuestosCapacidad(),
+      fetchEventosArmador(),
+    ]).then(([k, c, pc, ev]) => {
       if (!active) return
       if (k.status === 'fulfilled') setProdKpis(k.value)
       if (c.status === 'fulfilled') setCapKpis(c.value)
-      if (ac.status === 'fulfilled') setAreaCaps(ac.value)
+      if (pc.status === 'fulfilled') setPuestos(pc.value)
+      if (ev.status === 'fulfilled') setEventos(ev.value)
     })
     return () => { active = false }
   }, [reloadKey])
@@ -113,11 +117,38 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
     }
   }
 
-  // Ocupación por área (hoy)
-  const areaOccupancy = useMemo(() => PRODUCTION_STEPS.map(step => {
-    const cap = areaCaps.find(c => c.step === step)?.daily_capacity ?? 10
-    return { step, cap }
-  }), [areaCaps])
+  // Ocupación por puesto (hoy) — carga real desde el calendario CSV vs límite diario
+  const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const loadByPuesto = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    for (const ev of eventos) {
+      if (!ev.inicio.startsWith(todayISO)) continue
+      if (!ev.orden) continue
+      const set = map.get(ev.calendario) ?? new Set()
+      set.add(ev.orden)
+      map.set(ev.calendario, set)
+    }
+    return map
+  }, [eventos, todayISO])
+
+  const puestoRows = useMemo(() => puestos.map(p => {
+    const load = loadByPuesto.get(p.puesto)?.size ?? 0
+    const lim = p.limite_diario
+    let pct = 0
+    let tone: 'gray' | 'green' | 'amber' | 'red' = 'gray'
+    if (lim !== null && lim > 0) {
+      pct = Math.min(100, Math.round((load / lim) * 100))
+      tone = load > lim ? 'red' : pct >= 70 ? 'amber' : 'green'
+    }
+    return { ...p, load, pct, tone }
+  }), [puestos, loadByPuesto])
+
+  const puestoToneColor = {
+    gray:  { bar: 'var(--gray-300)', text: 'var(--gray-500)' },
+    green: { bar: 'var(--green)',    text: 'var(--green)' },
+    amber: { bar: 'var(--amber)',    text: 'var(--amber)' },
+    red:   { bar: 'var(--red)',      text: 'var(--red)' },
+  }
 
   const greeting = useMemo(() => {
     const h = new Date().getHours()
@@ -240,31 +271,44 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
               }}>
                 <TrendingUp size={14} />
               </div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-900)', margin: 0 }}>Capacidad por área</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-900)', margin: 0 }}>Capacidad por puesto</h3>
             </div>
             <button onClick={() => onNavigate('capacidad')} className='btn btn-ghost btn-sm' style={{ fontSize: 11.5 }}>
               Configurar →
             </button>
           </div>
 
-          {areaCaps.length === 0 ? (
+          {puestoRows.length === 0 ? (
             <div style={{ color: 'var(--gray-400)', fontSize: 12, padding: '24px 0', textAlign: 'center' }}>
-              Carga capacidades para ver la ocupación.
+              No hay puestos configurados.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {areaOccupancy.map(a => {
-                const occ = occupancyLevel(0, a.cap)
-                const toneColor = 'var(--gray-300)'
+              {puestoRows.map(r => {
+                const c = puestoToneColor[r.tone]
                 return (
-                  <div key={a.step} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div key={r.puesto} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gray-900)' }}>{STEP_LABELS[a.step]}</span>
-                        <span style={{ fontSize: 11, color: 'var(--gray-500)', fontWeight: 600 }}>{a.cap}/día</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gray-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.puesto}
+                        </span>
+                        {r.tone === 'gray' ? (
+                          <span style={{ fontSize: 11, color: 'var(--gray-400)', fontWeight: 600, flexShrink: 0 }}>
+                            Sin límite definido
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 11, color: c.text, fontWeight: 700, flexShrink: 0 }}>
+                            {r.load} / {r.limite_diario} · {r.pct}%
+                          </span>
+                        )}
                       </div>
                       <div style={{ width: '100%', height: 6, borderRadius: 3, background: 'var(--gray-100)', overflow: 'hidden' }}>
-                        <div style={{ width: `${occ.pct}%`, height: '100%', background: toneColor, transition: 'width 0.3s' }} />
+                        <div style={{
+                          width: r.tone === 'gray' ? 0 : `${r.pct}%`, height: '100%',
+                          background: r.tone === 'gray' ? 'var(--gray-300)' : c.bar,
+                          transition: 'width 0.3s',
+                        }} />
                       </div>
                     </div>
                   </div>
@@ -274,7 +318,7 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
           )}
 
           <div style={{ marginTop: 12, fontSize: 11, color: 'var(--gray-500)', paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-            Capacidad configurada. Click en &quot;Configurar&quot; para ajustarla.
+            Carga de hoy por puesto. Click en &quot;Configurar&quot; para editar los límites diarios.
           </div>
         </div>
       </div>

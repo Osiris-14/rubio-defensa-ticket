@@ -864,3 +864,92 @@ export async function fetchEmployeeLoadForDate (employeeId: string, fecha: strin
   if (error) throw new Error(error.message)
   return { count: count ?? 0, capacity }
 }
+
+// ─────────────────────────────────────────────────────────
+// Sprint 1: puesto_capacidad + orden_movimientos
+// ─────────────────────────────────────────────────────────
+
+export interface PuestoCapacidad {
+  id: string
+  puesto: string
+  limite_diario: number | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface OrdenMovimiento {
+  id: string
+  numero_orden: string
+  calendar_event_id: string | null
+  calendar_name: string | null
+  pieza: string | null
+  vehiculo: string | null
+  cliente: string | null
+  desde_puesto: string | null
+  hacia_puesto: string
+  tipo: 'ENTRADA' | 'CAMBIO_PUESTO' | 'SALIDA' | 'ESTANCADA' | string
+  detalle: string | null
+  dias_estancada: number
+  confirmada: boolean
+  ocurrido_en: string
+  created_at: string
+}
+
+export async function fetchPuestosCapacidad (): Promise<PuestoCapacidad[]> {
+  const { data, error } = await supabase
+    .from('puesto_capacidad')
+    .select('*')
+    .eq('activo', true)
+    .order('puesto', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as PuestoCapacidad[]
+}
+
+export async function updatePuestoLimiteDiario (puesto: string, limiteDiario: number | null): Promise<void> {
+  const { error } = await supabase
+    .from('puesto_capacidad')
+    .update({ limite_diario: limiteDiario, updated_at: new Date().toISOString() })
+    .eq('puesto', puesto)
+  if (error) throw new Error(error.message)
+}
+
+export async function fetchMovimientos (limit = 200): Promise<OrdenMovimiento[]> {
+  const { data, error } = await supabase
+    .from('orden_movimientos')
+    .select('*')
+    .order('ocurrido_en', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as OrdenMovimiento[]
+}
+
+export async function fetchMovimientosRecent (since: string): Promise<OrdenMovimiento[]> {
+  const { data, error } = await supabase
+    .from('orden_movimientos')
+    .select('*')
+    .gte('ocurrido_en', since)
+    .order('ocurrido_en', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as OrdenMovimiento[]
+}
+
+export async function insertMovimiento (row: Omit<OrdenMovimiento, 'id' | 'created_at' | 'ocurrido_en'>): Promise<void> {
+  const { error } = await supabase.from('orden_movimientos').insert([row])
+  if (error) throw new Error(error.message)
+}
+
+// Get the latest snapshot row per order (for delta comparison)
+export async function fetchLatestSnapshotPerOrden (): Promise<Map<string, OrdenMovimiento>> {
+  const { data, error } = await supabase
+    .from('orden_movimientos')
+    .select('*')
+    .in('tipo', ['ENTRADA', 'CAMBIO_PUESTO'])
+    .order('ocurrido_en', { ascending: false })
+  if (error) throw new Error(error.message)
+  const map = new Map<string, OrdenMovimiento>()
+  for (const row of (data ?? []) as OrdenMovimiento[]) {
+    if (!map.has(row.numero_orden)) map.set(row.numero_orden, row)
+  }
+  return map
+}

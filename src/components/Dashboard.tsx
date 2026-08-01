@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { AREA_THEME } from '@/lib/areaTheme'
 import {
   ArrowLeft, ArrowRight, RefreshCw, Calendar, ChartColumn as BarChart3,
-  LayoutDashboard, Plus, ListChecks, Settings, LogOut, ChevronLeft, ChevronRight, Bell, Wallet, CalendarDays, Gauge, Users,
+  LayoutDashboard, Plus, ListChecks, Settings, LogOut, ChevronLeft, ChevronRight, Bell, Wallet, Gauge, Users, ArrowLeftRight,
   type LucideIcon,
 } from 'lucide-react'
 import TicketRow from './TicketRow'
@@ -21,11 +21,12 @@ import AreasView from './produccion-v2/AreasView'
 import PagosView from './pagos/PagosView'
 import CalendarioProduccionView from './calendario/CalendarioProduccionView'
 import DashboardCapacidadView from './calendario/DashboardCapacidadView'
+import HojaMovimientosView from './planificacion/HojaMovimientosView'
 import AdminHome from './dashboard/AdminHome'
 
 interface Props { user: AppUser; onLogout: () => void }
 
-type View = 'dashboard' | 'form' | 'tickets' | 'produccion' | 'areas' | 'pagos' | 'calendario' | 'capacidad'
+type View = 'dashboard' | 'form' | 'tickets' | 'produccion' | 'areas' | 'pagos' | 'calendario' | 'capacidad' | 'movimientos'
 
 const AREA_ROLES: UserRole[] = ['recepcion', 'produccion', 'pintura', 'instalacion', 'marquilla', 'ferre']
 const AREA_DESCRIPTIONS: Record<string, string> = {
@@ -63,6 +64,7 @@ const VIEW_META: Record<View, { eyebrow: string; title: string; subtitle: string
   pagos:      { eyebrow: 'Pagos',        title: 'Pagos y Nóminas',        subtitle: 'Cálculo automático desde los movimientos de producción.' },
   calendario: { eyebrow: 'Planificación',title: 'Calendario de Producción', subtitle: 'Planificación de capacidad por día, área y empleado.' },
   capacidad:  { eyebrow: 'Capacidad',    title: 'Dashboard de Capacidad', subtitle: 'Visualiza la carga y configura capacidades diarias.' },
+  movimientos:{ eyebrow: 'Planificación',title: 'Hoja de Movimientos',    subtitle: 'Log en vivo de cómo las órdenes se mueven entre puestos.' },
 }
 
 export default function Dashboard({ user, onLogout }: Props) {
@@ -74,24 +76,24 @@ export default function Dashboard({ user, onLogout }: Props) {
   const userInitials = user.name.split(' ').map(n => n.charAt(0)).slice(0, 2).join('').toUpperCase()
 
   const allNavItems: { id: View; label: string; icon: LucideIcon; group: 'main' | 'ops' | 'plan' }[] = [
-    { id: 'dashboard',  label: 'Dashboard',  icon: LayoutDashboard, group: 'main' },
-    { id: 'produccion', label: 'Producción', icon: Settings,       group: 'ops' },
-    { id: 'areas',      label: 'Áreas',      icon: Users,          group: 'ops' },
-    { id: 'pagos',      label: 'Pagos',      icon: Wallet,         group: 'ops' },
-    { id: 'calendario', label: 'Calendario', icon: CalendarDays,   group: 'plan' },
-    { id: 'capacidad',  label: 'Capacidad',  icon: Gauge,          group: 'plan' },
-    { id: 'form',       label: 'Nuevo ticket', icon: Plus,         group: 'ops' },
-    { id: 'tickets',    label: 'Todos los tickets', icon: ListChecks, group: 'ops' },
+    { id: 'dashboard',    label: 'Dashboard',          icon: LayoutDashboard, group: 'main' },
+    { id: 'produccion',   label: 'Producción',         icon: Settings,       group: 'ops' },
+    { id: 'areas',        label: 'Áreas',              icon: Users,          group: 'ops' },
+    { id: 'pagos',        label: 'Pagos',              icon: Wallet,         group: 'ops' },
+    { id: 'movimientos',  label: 'Hoja de Movimientos', icon: ArrowLeftRight, group: 'plan' },
+    { id: 'capacidad',    label: 'Capacidad',          icon: Gauge,          group: 'plan' },
+    { id: 'form',         label: 'Nuevo ticket',       icon: Plus,           group: 'ops' },
+    { id: 'tickets',      label: 'Todos los tickets',  icon: ListChecks,     group: 'ops' },
   ]
   // Producción se auto-genera desde Alegra: este rol no crea tickets manualmente
   // ni tiene "Mis tickets" — su equivalente es la pestaña Completados dentro de
   // la vista Producción. Solo ve Dashboard + Producción. El resto de roles
   // (recepción, pintura, instalación, marquilla, ferré, admin) no cambian.
-  // Pagos / Calendario / Capacidad son solo para admin (nóminas, planificación).
+  // Pagos / Movimientos / Capacidad son solo para admin (nóminas, planificación).
   const navItems = allNavItems.filter(i => {
     if (i.id === 'pagos' && user.role !== 'admin') return false
-    if ((i.id === 'calendario' || i.id === 'capacidad' || i.id === 'areas') && user.role !== 'admin' && user.role !== 'produccion') return false
-    if (user.role === 'produccion' && !(i.id === 'dashboard' || i.id === 'produccion' || i.id === 'areas' || i.id === 'calendario' || i.id === 'capacidad')) return false
+    if ((i.id === 'movimientos' || i.id === 'capacidad' || i.id === 'areas') && user.role !== 'admin' && user.role !== 'produccion') return false
+    if (user.role === 'produccion' && !(i.id === 'dashboard' || i.id === 'produccion' || i.id === 'areas' || i.id === 'movimientos' || i.id === 'capacidad')) return false
     return true
   })
 
@@ -283,7 +285,7 @@ export default function Dashboard({ user, onLogout }: Props) {
         background: 'var(--bg-page)',
       }}>
         {/* Header con breadcrumb — solo para vistas tradicionales; Producción, Pagos, Calendario y Capacidad lo gestionan internamente */}
-        {view !== 'produccion' && view !== 'areas' && view !== 'pagos' && view !== 'calendario' && view !== 'capacidad' && (
+        {view !== 'produccion' && view !== 'areas' && view !== 'pagos' && view !== 'calendario' && view !== 'capacidad' && view !== 'movimientos' && (
           <PageHeaderBar
             eyebrow={meta.eyebrow}
             title={meta.title}
@@ -307,6 +309,7 @@ export default function Dashboard({ user, onLogout }: Props) {
           {view === 'pagos' && <PagosView user={user} />}
           {view === 'calendario' && <CalendarioProduccionView user={user} />}
           {view === 'capacidad' && <DashboardCapacidadView user={user} />}
+          {view === 'movimientos' && <HojaMovimientosView />}
         </div>
       </div>
 
@@ -320,6 +323,7 @@ export default function Dashboard({ user, onLogout }: Props) {
                 : item.id === 'produccion' ? '⚙'
                 : item.id === 'areas' ? '☺'
                 : item.id === 'pagos' ? '¥'
+                : item.id === 'movimientos' ? '⇄'
                 : item.id === 'calendario' ? '▦'
                 : item.id === 'capacidad' ? '☰'
                 : '☰'}
@@ -329,6 +333,7 @@ export default function Dashboard({ user, onLogout }: Props) {
               : item.id === 'produccion' ? 'Prod.'
               : item.id === 'areas' ? 'Áreas'
               : item.id === 'pagos' ? 'Pagos'
+              : item.id === 'movimientos' ? 'Mov.'
               : item.id === 'calendario' ? 'Cal.'
               : item.id === 'capacidad' ? 'Cap.'
               : 'Inicio'}</span>

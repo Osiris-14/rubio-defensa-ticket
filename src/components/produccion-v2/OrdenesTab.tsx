@@ -24,9 +24,11 @@ import AbrirProduccionModal from './AbrirProduccionModal'
 interface Props {
   user: { id: string; name: string; role: string }
   onChanged: () => void
+  filterOrden?: string
+  filterEstado?: 'todos' | 'atrasados' | 'al_dia'
 }
 
-export default function OrdenesTab ({ user, onChanged }: Props) {
+export default function OrdenesTab ({ user, onChanged, filterOrden = '', filterEstado = 'todos' }: Props) {
   const [ordenes, setOrdenes] = useState<OrdenAlegra[]>([])
   const [eventos, setEventos] = useState<EventoArmador[]>([])
   const [ordenesMap, setOrdenesMap] = useState<Map<string, OrdenAlegra>>(new Map())
@@ -108,6 +110,27 @@ export default function OrdenesTab ({ user, onChanged }: Props) {
 
   const fecha28 = `28/${String(hoy.getMonth() + 1).padStart(2, '0')}`
 
+  // Filtros compartidos con la vista Agenda
+  const hoyISO = hoy.toISOString().slice(0, 10)
+  const ordenFiltro = filterOrden.trim().toLowerCase()
+  const eventoAtrasado = (ev: EventoArmador) => {
+    const c = eventoCompromiso(ev, hoy)
+    return c !== null && c < hoyISO
+  }
+  const eventosFiltrados = eventos.filter(ev => {
+    if (ordenFiltro && !ev.orden.toLowerCase().includes(ordenFiltro)) return false
+    if (filterEstado === 'atrasados' && !eventoAtrasado(ev)) return false
+    if (filterEstado === 'al_dia' && eventoAtrasado(ev)) return false
+    return true
+  })
+  const ordenesFiltradas = ordenes.filter(o => {
+    if (ordenFiltro && !(o.talonario ?? '').toLowerCase().includes(ordenFiltro) && !o.factura.toLowerCase().includes(ordenFiltro)) return false
+    if (filterEstado === 'atrasados' && o.estado_cxc !== 'Atraso') return false
+    if (filterEstado === 'al_dia' && o.estado_cxc === 'Atraso') return false
+    return true
+  })
+  const hayFiltros = ordenFiltro !== '' || filterEstado !== 'todos'
+
   return (
     <>
       {error && (
@@ -123,14 +146,16 @@ export default function OrdenesTab ({ user, onChanged }: Props) {
       <SectionHeader
         title='Proceso de armado'
         subtitle='Filas del calendario de los armadores (armado programado del mes en curso en adelante), enlazadas por número de ORDEN con las órdenes. La fecha de compromiso se agrega sola cuando el calendario trae el día.'
-        badge={eventos.length > 0 ? String(eventos.length) : undefined}
+        badge={eventosFiltrados.length > 0 ? String(eventosFiltrados.length) : undefined}
       />
 
-      {eventos.length === 0 ? (
+      {eventosFiltrados.length === 0 ? (
         <EmptyState
           icon={CalendarPlus}
-          title='No hay armado programado'
-          description='Cuando los armadores agenden piezas en sus calendarios, aparecerán aquí como filas con su fecha de compromiso.'
+          title={hayFiltros ? 'Sin coincidencias' : 'No hay armado programado'}
+          description={hayFiltros
+            ? 'Ninguna fila del calendario coincide con los filtros aplicados.'
+            : 'Cuando los armadores agenden piezas en sus calendarios, aparecerán aquí como filas con su fecha de compromiso.'}
         />
       ) : (
         <div className='card' style={{ overflow: 'hidden', marginBottom: 40 }}>
@@ -146,7 +171,7 @@ export default function OrdenesTab ({ user, onChanged }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {eventos.map(ev => (
+                {eventosFiltrados.map(ev => (
                   <ArmadoRow
                     key={ev.id}
                     ev={ev}
@@ -175,20 +200,22 @@ export default function OrdenesTab ({ user, onChanged }: Props) {
       <SectionHeader
         title='Órdenes'
         subtitle={`Todas las órdenes abiertas desde el día 28 del mes actual (${fecha28} en adelante).`}
-        badge={ordenes.length > 0 ? String(ordenes.length) : undefined}
+        badge={ordenesFiltradas.length > 0 ? String(ordenesFiltradas.length) : undefined}
       />
 
-      {ordenes.length === 0 ? (
+      {ordenesFiltradas.length === 0 ? (
         <EmptyState
           icon={Inbox}
-          title='No hay órdenes desde el 28'
-          description={`Las facturas de Alegra aparecerán aquí automáticamente cuando tengan fecha de apertura del ${fecha28} en adelante.`}
+          title={hayFiltros ? 'Sin coincidencias' : 'No hay órdenes desde el 28'}
+          description={hayFiltros
+            ? 'Ninguna orden coincide con los filtros aplicados.'
+            : `Las facturas de Alegra aparecerán aquí automáticamente cuando tengan fecha de apertura del ${fecha28} en adelante.`}
         />
       ) : (
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16,
         }}>
-          {ordenes.map(o => (
+          {ordenesFiltradas.map(o => (
             <OrdenCard
               key={o.alegra_id}
               orden={o}
