@@ -1,4 +1,4 @@
-"""
+﻿"""
 Exporta a CSV los eventos de los calendarios de ARMADORES de Google Calendar.
 
 Basado en exportar_calendario.py (repo reporte-cxc-alegra), que extrae el
@@ -25,11 +25,13 @@ Uso:
     python exportar_calendarios_armadores.py
 """
 
+import argparse
 import csv
 import glob
 import html
 import os.path
 import re
+from datetime import datetime, timedelta, timezone
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -58,8 +60,11 @@ CALENDARIOS = [
     ("PUESTO 3 ARMADOR", "armador_puesto3_armador"),
 ]
 
-# Solo exporta eventos cuyo año de inicio coincida. "" = todos los años.
-ANIO_FILTRO = "2026"
+# Ventana de exportacion: dias hacia atras y hacia adelante desde hoy.
+# Reemplaza el filtro por anio fijo -- evita que los CSVs crezcan sin limite.
+# Puedes sobreescribir con --days-back / --days-ahead desde CLI.
+DAYS_BACK_DEFAULT = 30
+DAYS_AHEAD_DEFAULT = 90
 
 # Carpeta de salida dentro del repo (la lee la web app desde public/).
 # Se calcula desde la ubicación de este script para que funcione sin importar
@@ -231,14 +236,12 @@ def buscar_calendario(service, fragmento):
     return None
 
 
-def obtener_eventos(service, calendar_id, anio=None):
-    """Trae todos los eventos del calendario. Si se pasa `anio`, arranca el 1 de
-    enero de ese año (el default de la API excluye el pasado: timeMin = hoy)."""
+def obtener_eventos(service, calendar_id, time_min: str, time_max: str):
+    """Trae eventos del calendario dentro de la ventana [time_min, time_max].
+    Ambos deben ser strings ISO-8601 con timezone (ej. "2026-07-06T00:00:00-04:00").
+    """
     eventos = []
     page_token = None
-    extra = {}
-    if anio:
-        extra["timeMin"] = f"{anio}-01-01T00:00:00-04:00"
     while True:
         resultado = (
             service.events()
@@ -248,7 +251,8 @@ def obtener_eventos(service, calendar_id, anio=None):
                 orderBy="startTime",
                 maxResults=2500,
                 pageToken=page_token,
-                **extra,
+                timeMin=time_min,
+                timeMax=time_max,
             )
             .execute()
         )
@@ -263,6 +267,20 @@ def obtener_eventos(service, calendar_id, anio=None):
 # MAIN
 # ---------------------------------------------------------------------------
 def main():
+    parser = argparse.ArgumentParser(description="Exporta calendarios de armadores a CSV")
+    parser.add_argument("--days-back",  type=int, default=DAYS_BACK_DEFAULT,
+                        help=f"Dias hacia atras desde hoy (default {DAYS_BACK_DEFAULT})")
+    parser.add_argument("--days-ahead", type=int, default=DAYS_AHEAD_DEFAULT,
+                        help=f"Dias hacia adelante desde hoy (default {DAYS_AHEAD_DEFAULT})")
+    args = parser.parse_args()
+
+    tz_local = timezone(timedelta(hours=-4))  # UTC-4 (hora RD)
+    now = datetime.now(tz=tz_local)
+    time_min = (now - timedelta(days=args.days_back)).strftime("%Y-%m-%dT00:00:00-04:00")
+    time_max = (now + timedelta(days=args.days_ahead)).strftime("%Y-%m-%dT23:59:59-04:00")
+
+    print(f"Ventana: {time_min}  ->  {time_max}  ({args.days_back}d atras / {args.days_ahead}d adelante)")
+
     try:
         creds = obtener_credenciales()
         service = build("calendar", "v3", credentials=creds)
@@ -283,7 +301,7 @@ def main():
             color_defecto_id = calendario.get("colorId", "")
             color_defecto_fondo = calendario.get("backgroundColor", "")
 
-            eventos = obtener_eventos(service, calendar_id, ANIO_FILTRO)
+            eventos = obtener_eventos(service, calendar_id, time_min, time_max)
             print(f"  Eventos encontrados: {len(eventos)}")
 
             archivo = os.path.join(SALIDA_DIR, f"{slug}.csv")
@@ -315,7 +333,6 @@ def main():
 
                 escritos = 0
                 excluidos = 0
-                fuera_de_anio = 0
                 for ev in eventos:
                     titulo = ev.get("summary", "(sin titulo)")
 
@@ -327,9 +344,6 @@ def main():
                     fin = ev["end"].get("dateTime", ev["end"].get("date", ""))
                     todo_el_dia = "date" in ev["start"]
 
-                    if ANIO_FILTRO and not str(inicio).startswith(ANIO_FILTRO):
-                        fuera_de_anio += 1
-                        continue
 
                     color_id = ev.get("colorId")
                     if color_id:
@@ -373,7 +387,7 @@ def main():
                     escritos += 1
 
                 total_escritos += escritos
-                print(f"  Escritos: {escritos} | Excluidos: {excluidos} | Fuera de {ANIO_FILTRO}: {fuera_de_anio}")
+                print(f"  Escritos: {escritos} | Excluidos: {excluidos}")
                 print(f"  CSV: {archivo}")
 
         print(f"\nListo. Total eventos escritos: {total_escritos}")

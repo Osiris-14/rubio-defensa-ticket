@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Gauge, AlertTriangle, Users, Edit2, Save, X, AlertCircle, MinusCircle,
@@ -47,7 +47,7 @@ export default function DashboardCapacidadView ({ user }: Props) {
     try {
       const [p, ev] = await Promise.all([
         fetchPuestosCapacidad(),
-        fetchEventosArmador(),
+        fetchEventosArmador(todayISO()),
       ])
       setPuestos(p)
       setEventos(ev)

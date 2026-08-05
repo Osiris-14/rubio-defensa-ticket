@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+﻿import { supabase } from './supabase'
 import {
   CALENDARIO_FILES,
   parseCSV,
@@ -21,18 +21,24 @@ export {
   type CompromisoRow,
 } from './ordenes-core'
 
-export async function fetchEventosArmador (): Promise<EventoArmador[]> {
+/**
+ * Carga los calendarios de armadores en paralelo.
+ * @param datePrefix  Opcional: "YYYY-MM-DD". Si se pasa, solo retorna eventos
+ *                    cuyo campo `inicio` empiece con ese prefijo.
+ *                    Evita procesar todo el historial cuando solo se necesita un dia.
+ */
+export async function fetchEventosArmador (datePrefix?: string): Promise<EventoArmador[]> {
+  // Fetch en paralelo -- antes era secuencial (await dentro del for)
+  const rawResults = await Promise.allSettled(
+    CALENDARIO_FILES.map(slug =>
+      fetch(`/data/calendario_armadores/${slug}.csv`).then(r => r.ok ? r.text() : null)
+    )
+  )
+
   const eventos: EventoArmador[] = []
-  for (const slug of CALENDARIO_FILES) {
-    let res: Response
-    try {
-      res = await fetch(`/data/calendario_armadores/${slug}.csv`)
-    } catch {
-      continue
-    }
-    if (!res.ok) continue
-    const text = await res.text()
-    const rows = parseCSV(text)
+  for (const result of rawResults) {
+    if (result.status === 'rejected' || result.value == null) continue
+    const rows = parseCSV(result.value)
     if (rows.length < 2) continue
     const header = rows[0].map(h => h.trim())
     const i = (name: string) => header.indexOf(name)
@@ -44,16 +50,19 @@ export async function fetchEventosArmador (): Promise<EventoArmador[]> {
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r]
       const get = (idx: number) => (idx >= 0 ? (row[idx] ?? '').trim() : '')
+      const inicio = get(iInicio)
+      // Filtro por fecha si se especifica -- evita procesar todo el historial
+      if (datePrefix && !inicio.startsWith(datePrefix)) continue
       const titulo = get(iTitulo)
       if (!titulo) continue
       const parsed = parseEventoArmador(titulo)
       // Todo evento se conserva: el calendario es la fuente de verdad.
-      // Sin número de orden detectable, la tarjeta se muestra igual,
+      // Sin numero de orden detectable, la tarjeta se muestra igual,
       // simplemente sin enriquecimiento de Alegra.
       eventos.push({
         id: get(iId),
         titulo,
-        inicio: get(iInicio),
+        inicio,
         calendario: get(iCal),
         color_nombre: get(iColor),
         pieza: parsed?.pieza ?? titulo,
