@@ -1,30 +1,17 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# sync-calendarios.yml
-#
-# Extrae los eventos de los calendarios de armadores desde Google Calendar
-# y actualiza los CSVs en public/data/calendario_armadores/.
-# Corre automáticamente cada 2 horas en días hábiles (horas RD = UTC-4).
-# También se puede lanzar manualmente desde la pestaña Actions de GitHub.
-#
-# SECRETO REQUERIDO (Settings → Secrets → Actions):
-#   GOOGLE_TOKEN_JSON  →  contenido completo de token.json
-#                         (debe incluir refresh_token para renovarse solo)
-#
-# Cómo obtener el token.json:
-#   1. Corre el script una vez localmente (abre el navegador para autorizar)
-#   2. Copia el contenido de scripts/calendarios_armadores/token.json
-#   3. Pégalo como secreto GOOGLE_TOKEN_JSON en GitHub
-# ─────────────────────────────────────────────────────────────────────────────
-
 name: Sync Calendarios Armadores
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Extrae eventos de Google Calendar → CSVs en public/data/calendario_armadores/
+# SECRETO REQUERIDO en Settings → Secrets → Actions:
+#   GOOGLE_TOKEN_JSON  →  contenido completo de token.json (con refresh_token)
+# ─────────────────────────────────────────────────────────────────────────────
 
 on:
   schedule:
-    # Cada 2 horas de lunes a sábado, de 6am a 10pm hora RD (UTC-4)
-    # UTC equivalentes: 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00, 00:00
+    # 8 veces al día, lunes-sábado, de 6am a 8pm hora RD (UTC-4)
+    # UTC: 10, 12, 14, 16, 18, 20, 22, 00
     - cron: "0 10,12,14,16,18,20,22,0 * * 1-6"
 
-  # Permite lanzarlo manualmente desde GitHub → Actions → Run workflow
   workflow_dispatch:
     inputs:
       days_back:
@@ -42,17 +29,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    permissions:
+      contents: write
+
     steps:
-      # ── 1. Checkout del repo ──────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          # Necesitamos push al final — el token por defecto no tiene permisos
-          # de escritura si el repo es privado con protección de rama; si eso
-          # ocurre, crea un PAT y úsalo como GH_PAT en los secretos.
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── 2. Python ─────────────────────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -61,17 +44,14 @@ jobs:
           cache-dependency-path: scripts/calendarios_armadores/requirements.txt
 
       - name: Instalar dependencias
-        run: |
-          pip install -r scripts/calendarios_armadores/requirements.txt
+        run: pip install -r scripts/calendarios_armadores/requirements.txt
 
-      # ── 3. Escribir el token de Google Calendar ───────────────────────────
       - name: Escribir token.json
         env:
           GOOGLE_TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN_JSON }}
         run: |
           echo "$GOOGLE_TOKEN_JSON" > scripts/calendarios_armadores/token.json
 
-      # ── 4. Correr el script de extracción ─────────────────────────────────
       - name: Exportar calendarios
         run: |
           DAYS_BACK="${{ github.event.inputs.days_back || '30' }}"
@@ -81,25 +61,20 @@ jobs:
             --days-back "$DAYS_BACK" \
             --days-ahead "$DAYS_AHEAD"
 
-      # ── 5. Commit y push de los CSVs actualizados ─────────────────────────
-      - name: Commit CSVs actualizados
+      - name: Commit y push CSVs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add public/data/calendario_armadores/*.csv
-
-          # Solo commitear si hay cambios reales
           if git diff --cached --quiet; then
-            echo "Sin cambios en los CSVs — nada que commitear."
+            echo "Sin cambios en los CSVs."
           else
             TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
-            git commit -m "chore(calendarios): sync automático $TIMESTAMP"
+            git commit -m "chore(calendarios): sync automatico $TIMESTAMP"
             git push
-            echo "CSVs actualizados y pusheados."
+            echo "CSVs actualizados."
           fi
 
-      # ── 6. Limpiar el token (seguridad) ───────────────────────────────────
       - name: Limpiar token.json
         if: always()
         run: rm -f scripts/calendarios_armadores/token.json
