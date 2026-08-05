@@ -9,10 +9,10 @@
 import { type EventoArmador } from '@/lib/ordenes-core'
 import { type FacturaProduccion } from '@/lib/production-v2'
 
-export type Etapa = 'corte' | 'doblado' | 'fabricacion'
+export type Etapa = 'corte' | 'doblado' | 'fabricacion' | 'soldadura'
 export type Periodo = 'dia' | 'semana' | 'mes'
 
-export const ETAPAS: Etapa[] = ['corte', 'doblado', 'fabricacion']
+export const ETAPAS: Etapa[] = ['corte', 'doblado', 'fabricacion', 'soldadura']
 
 // Umbral con el que la vista silver ya considera cerrada una factura.
 const UMBRAL_SALDO = 450
@@ -176,6 +176,23 @@ export interface TarjetaOrden {
   alerta: boolean
   /** null = la orden no casó con ninguna factura de Alegra. */
   alegra: DatosAlegra | null
+  /** Solo se llena en la pestaña Soldadura (cuando la orden fue dada de alta). */
+  precio?: number | null
+  modoDoblado?: 'self_bent' | 'other_bent' | null
+}
+
+// Datos mínimos de una orden que ya fue dada de alta a Soldadura.
+// OrdenesTab los construye parseando el campo detalle del movimiento.
+export interface AltaSoldadura {
+  orden: string
+  pieza: string | null
+  vehiculo: string | null
+  cliente: string | null
+  factura: string | null
+  puestoOrigen: string | null
+  modo: 'self_bent' | 'other_bent'
+  precio: number | null
+  ocurridoEn: string
 }
 
 export interface GrupoPuesto {
@@ -212,10 +229,15 @@ interface BuildParams {
   confirmadas: Set<string>
   periodo: Periodo
   filtro?: string
+  /** Órdenes ya dadas de alta a Soldadura — se excluyen de las etapas previas. */
+  altaOrdenes?: Set<string>
+  /** Datos de las altas para construir la pestaña Soldadura. */
+  altaMovimientos?: AltaSoldadura[]
 }
 
 export function buildModelo ({
   eventos, facturas, hoy, confirmadas, periodo, filtro = '',
+  altaOrdenes = new Set(), altaMovimientos = [],
 }: BuildParams): ModeloProduccion {
   const hoyISO = isoLocal(hoy)
   const rango = rangoDe(periodo, hoy)
@@ -227,12 +249,14 @@ export function buildModelo ({
 
   // 1. Tarjetas: un evento por tarjeta. Cada evento se muestra en la
   //    etapa de SU PROPIO calendario (sin fusionar calendarios por orden).
-  const porEtapa: Record<Etapa, TarjetaOrden[]> = { corte: [], doblado: [], fabricacion: [] }
+  const porEtapa: Record<Etapa, TarjetaOrden[]> = { corte: [], doblado: [], fabricacion: [], soldadura: [] }
 
   eventos.forEach((ev, i) => {
     const fecha = (ev.inicio || '').slice(0, 10)
     if (!fecha || fecha < rango.desde || fecha > rango.hasta) return
     if (q && !ev.orden.toLowerCase().includes(q)) return
+    // Órdenes ya dadas de alta no aparecen en su etapa original.
+    if (ev.orden && altaOrdenes.has(ev.orden)) return
 
     const etapa = rolCalendario(ev.calendario)
     const factura = ev.orden ? porTalonario.get(ev.orden) ?? null : null
@@ -255,6 +279,31 @@ export function buildModelo ({
             pagada: factura.saldo <= UMBRAL_SALDO,
           }
         : null,
+    })
+  })
+
+  // 2. Pestaña Soldadura: construida desde los movimientos ALTA_SOLDADURA.
+  altaMovimientos.forEach((alta, i) => {
+    const factura = alta.orden ? porTalonario.get(alta.orden) ?? null : null
+    porEtapa.soldadura.push({
+      key: `alta-${alta.orden}-${i}`,
+      orden: alta.orden,
+      titulo: alta.pieza ?? '',
+      fecha: (alta.ocurridoEn || '').slice(0, 10),
+      puesto: alta.puestoOrigen ?? '',
+      puestoLabel: alta.puestoOrigen ? labelPuesto(alta.puestoOrigen) : '—',
+      vehiculo: alta.vehiculo ?? factura?.vehiculo ?? null,
+      cliente: alta.cliente ?? factura?.cliente ?? null,
+      dias: 0,
+      alerta: false,
+      alegra: (alta.factura || factura)
+        ? {
+            factura: alta.factura ?? factura?.factura ?? '',
+            pagada: factura ? factura.saldo <= UMBRAL_SALDO : false,
+          }
+        : null,
+      precio: alta.precio,
+      modoDoblado: alta.modo,
     })
   })
 

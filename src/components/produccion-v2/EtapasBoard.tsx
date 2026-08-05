@@ -10,6 +10,7 @@ import type {
 import { ETAPAS } from './etapas'
 
 const ROJO = '#E8180A'
+const VERDE_SOLDADURA = '#1A7F5A'
 
 interface Tema {
   titulo: string
@@ -28,6 +29,7 @@ const TEMAS: Record<Etapa, Tema> = {
   corte:       { titulo: 'Corte',       icono: '✂',  bg: '#FAEEDA', text: '#633806', accent: '#997022', linea: '#F0D9A0' },
   doblado:     { titulo: 'Doblado',     icono: '〰', bg: '#E6F1FB', text: '#0C447C', accent: '#0C447C', linea: '#B8D4F0' },
   fabricacion: { titulo: 'Fabricación', icono: '🔧', bg: '#EAF3DE', text: '#3B6D11', accent: '#3B6D11', linea: '#C4DFA0' },
+  soldadura:   { titulo: 'Soldadura',   icono: '⚡',  bg: '#E8F5F0', text: VERDE_SOLDADURA, accent: VERDE_SOLDADURA, linea: '#A8D9C8' },
 }
 
 const PERIODOS: { id: Periodo; label: string }[] = [
@@ -44,10 +46,14 @@ interface Props {
   onPeriodo: (p: Periodo) => void
   confirmando: string | null
   onConfirmar: (t: TarjetaOrden) => void
+  /** Dar de Alta → mover a Soldadura */
+  dandoAlta: string | null
+  onDarAlta: (t: TarjetaOrden) => void
 }
 
 export default function EtapasBoard ({
   modelo, etapaActiva, onEtapa, periodo, onPeriodo, confirmando, onConfirmar,
+  dandoAlta, onDarAlta,
 }: Props) {
   const tema = TEMAS[etapaActiva]
   const datos = modelo.etapas[etapaActiva]
@@ -113,8 +119,11 @@ export default function EtapasBoard ({
               dia={dia}
               tema={tema}
               conPuestos={etapaActiva === 'fabricacion'}
+              esSoldadura={etapaActiva === 'soldadura'}
               confirmando={confirmando}
               onConfirmar={onConfirmar}
+              dandoAlta={dandoAlta}
+              onDarAlta={onDarAlta}
             />
           ))
         )}
@@ -168,12 +177,15 @@ function TabEtapa ({ etapa, activa, datos, onClick }: {
 }
 
 // ─────────────────────────────────────────────────────────
-function SeccionDia ({ dia, tema, conPuestos, confirmando, onConfirmar }: {
+function SeccionDia ({ dia, tema, conPuestos, esSoldadura, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
   dia: GrupoDia
   tema: Tema
   conPuestos: boolean
+  esSoldadura: boolean
   confirmando: string | null
   onConfirmar: (t: TarjetaOrden) => void
+  dandoAlta: string | null
+  onDarAlta: (t: TarjetaOrden) => void
 }) {
   return (
     <div style={{ marginBottom: 20 }}>
@@ -200,39 +212,46 @@ function SeccionDia ({ dia, tema, conPuestos, confirmando, onConfirmar }: {
             }}>
               · {gp.puesto}
             </div>
-            <GridTarjetas tarjetas={gp.tarjetas} tema={tema} confirmando={confirmando} onConfirmar={onConfirmar} />
+            <GridTarjetas tarjetas={gp.tarjetas} tema={tema} esSoldadura={false} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
           </div>
         ))
       ) : (
-        <GridTarjetas tarjetas={dia.tarjetas} tema={tema} confirmando={confirmando} onConfirmar={onConfirmar} />
+        <GridTarjetas tarjetas={dia.tarjetas} tema={tema} esSoldadura={esSoldadura} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
       )}
     </div>
   )
 }
 
-function GridTarjetas ({ tarjetas, tema, confirmando, onConfirmar }: {
+function GridTarjetas ({ tarjetas, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
   tarjetas: TarjetaOrden[]
   tema: Tema
+  esSoldadura: boolean
   confirmando: string | null
   onConfirmar: (t: TarjetaOrden) => void
+  dandoAlta: string | null
+  onDarAlta: (t: TarjetaOrden) => void
 }) {
   return (
     <div className='orden-grid'>
       {tarjetas.map(t => (
-        <Tarjeta key={t.key} t={t} tema={tema} confirmando={confirmando} onConfirmar={onConfirmar} />
+        <Tarjeta key={t.key} t={t} tema={tema} esSoldadura={esSoldadura} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
       ))}
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────
-function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
+function Tarjeta ({ t, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
   t: TarjetaOrden
   tema: Tema
+  esSoldadura: boolean
   confirmando: string | null
   onConfirmar: (t: TarjetaOrden) => void
+  dandoAlta: string | null
+  onDarAlta: (t: TarjetaOrden) => void
 }) {
   const enCurso = confirmando === t.orden
+  const enAlta = dandoAlta === t.orden
 
   return (
     <div style={{
@@ -254,7 +273,7 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
         {t.orden ? `#${t.orden} · ` : ''}{t.titulo}
       </div>
 
-      {/* 3. Metadatos: fecha · puesto · Alegra (si casó la factura) */}
+      {/* 3. Metadatos */}
       <div style={{ fontSize: 11, color: '#666', marginTop: 6, lineHeight: 1.6 }}>
         <div>Fecha · {formatoFecha(t.fecha)}</div>
         <div>Puesto · {t.puestoLabel}</div>
@@ -266,7 +285,7 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
         )}
       </div>
 
-      {/* 4. Estado de pago — se omite si no hay match en Alegra */}
+      {/* 4. Estado de pago */}
       {t.alegra && (
         <div style={{ marginTop: 6 }}>
           {t.alegra.pagada ? (
@@ -287,8 +306,31 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
         </div>
       )}
 
-      {/* 5. Confirmar salida — solo en alertas */}
-      {t.alerta && (
+      {/* 5. Info de precio (solo en Soldadura) */}
+      {esSoldadura && (
+        <div style={{
+          marginTop: 8, padding: '6px 10px', borderRadius: 6,
+          background: '#E8F5F0', border: '0.5px solid #A8D9C8',
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: VERDE_SOLDADURA }}>
+            ⚡ En Soldadura
+          </div>
+          {t.precio != null && (
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A', marginTop: 2 }}>
+              RD$ {new Intl.NumberFormat('es-DO', { maximumFractionDigits: 0 }).format(t.precio)}
+              <span style={{ fontSize: 10, fontWeight: 400, color: '#666', marginLeft: 6 }}>
+                {t.modoDoblado === 'other_bent' ? '· Me lo doblaron' : '· Doblé yo'}
+              </span>
+            </div>
+          )}
+          {t.precio == null && (
+            <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>— sin precio en tarifario</div>
+          )}
+        </div>
+      )}
+
+      {/* 6. Confirmar salida — solo en alertas (no en soldadura) */}
+      {t.alerta && !esSoldadura && (
         <button
           type='button'
           onClick={() => onConfirmar(t)}
@@ -301,6 +343,23 @@ function Tarjeta ({ t, tema, confirmando, onConfirmar }: {
           }}
         >
           {enCurso ? 'Confirmando…' : 'Confirmar salida'}
+        </button>
+      )}
+
+      {/* 7. Dar de Alta → mover a Soldadura (solo si hay número de orden) */}
+      {!esSoldadura && t.orden && (
+        <button
+          type='button'
+          onClick={() => onDarAlta(t)}
+          disabled={enAlta}
+          style={{
+            marginTop: 6, width: '100%', padding: '5px 8px',
+            background: VERDE_SOLDADURA, color: '#fff', border: 'none', borderRadius: 5,
+            fontSize: 10, fontWeight: 600, cursor: enAlta ? 'default' : 'pointer',
+            opacity: enAlta ? 0.6 : 1,
+          }}
+        >
+          {enAlta ? 'Dando de alta…' : '⚡ Dar de Alta → Soldadura'}
         </button>
       )}
     </div>
