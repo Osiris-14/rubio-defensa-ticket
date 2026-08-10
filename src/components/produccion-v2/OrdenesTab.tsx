@@ -8,6 +8,7 @@ import { AlertCircle } from 'lucide-react'
 import {
   fetchMovimientos,
   insertMovimiento,
+  insertCobroProduccion,
   fetchFacturasProduccion,
   fetchPriceCatalog,
   type FacturaProduccion,
@@ -18,10 +19,10 @@ import {
   fetchEventosArmador,
   type EventoArmador,
 } from '@/lib/ordenes'
-import { matchTarifa, precioFabricacion, type ModoDoblado } from '@/lib/tarifario'
+import { precioFabricacion, type ModoDoblado } from '@/lib/tarifario'
 import { friendlyError } from '@/lib/errorMessages'
 import EtapasBoard from './EtapasBoard'
-import { buildModelo, type Etapa, type Periodo, type TarjetaOrden, type AltaSoldadura } from './etapas'
+import { buildModelo, rolCalendario, type Etapa, type Periodo, type TarjetaOrden, type AltaSoldadura } from './etapas'
 
 interface Props {
   user: { id: string; name: string; role: string }
@@ -106,29 +107,109 @@ export default function OrdenesTab ({ user, onChanged, busqueda, onAlertas }: Pr
   }, [])
 
   const modelo = useMemo(
-    () => buildModelo({ eventos, facturas, hoy, confirmadas, periodo, filtro: busqueda, altaOrdenes, altaMovimientos }),
-    [eventos, facturas, hoy, confirmadas, periodo, busqueda, altaOrdenes, altaMovimientos],
+    () => buildModelo({ eventos, facturas, catalogo, hoy, confirmadas, periodo, filtro: busqueda, altaOrdenes, altaMovimientos }),
+    [eventos, facturas, catalogo, hoy, confirmadas, periodo, busqueda, altaOrdenes, altaMovimientos],
   )
 
   useEffect(() => { onAlertas(modelo.totalAlertas) }, [modelo.totalAlertas, onAlertas])
 
-  async function handleConfirmarSalida (t: TarjetaOrden) {
-    setConfirmando(t.orden)
-    try {
+  // Detecta si la orden pasó por el calendario de Deivi (doblador) —
+  // decide qué columna del tarifario aplica (me lo doblaron / doblé yo).
+  function calcularModo (orden: string): ModoDoblado {
+    const ordenesDeivi = new Set(
+      eventos
+        .filter(ev => {
+          const k = ev.calendario.toUpperCase().replace(/\s+/g, ' ').trim()
+          return k.includes('DEIVI') || k.includes('P-13') || k.includes('DOBLADOR')
+        })
+        .map(ev => ev.orden)
+        .filter(Boolean),
+    )
+    return ordenesDeivi.has(orden) ? 'other_bent' : 'self_bent'
+  }
+
+  // Mueve una tarjeta (posiblemente varias piezas) a Soldadura: inserta
+  // el/los movimiento(s) ALTA_SOLDADURA (y opcionalmente SALIDA antes),
+  // y registra el precio de cada pieza en cobros_produccion cuando la
+  // tarjeta pertenece a Fabricación.
+  async function moverASoldadura (t: TarjetaOrden, incluirSalida: boolean) {
+    const modo = calcularModo(t.orden)
+    const esFabricacion = rolCalendario(t.puesto) === 'fabricacion'
+    const factura = t.alegra?.factura ?? null
+    const nuevasAltas: AltaSoldadura[] = []
+
+    for (const pieza of t.piezas) {
+      const fila = pieza.matchKey ? catalogo.find(r => r.active && r.piece_name === pieza.matchKey) ?? null : null
+      const precio = fila ? precioFabricacion(fila, modo) : null
+
+      if (incluirSalida) {
+        await insertMovimiento({
+          numero_orden: t.orden,
+          calendar_event_id: null,
+          calendar_name: t.puesto,
+          pieza: pieza.raw || null,
+          vehiculo: t.vehiculo,
+          cliente: t.cliente,
+          desde_puesto: t.puesto,
+          hacia_puesto: t.puesto,
+          tipo: 'SALIDA',
+          detalle: `Salida confirmada por ${user.name}`,
+          dias_estancada: t.dias,
+          confirmada: true,
+        })
+      }
+
       await insertMovimiento({
         numero_orden: t.orden,
         calendar_event_id: null,
         calendar_name: t.puesto,
-        pieza: t.titulo || null,
+        pieza: pieza.raw || null,
         vehiculo: t.vehiculo,
         cliente: t.cliente,
         desde_puesto: t.puesto,
-        hacia_puesto: t.puesto,
-        tipo: 'SALIDA',
-        detalle: `Salida confirmada por ${user.name}`,
+        hacia_puesto: 'soldadura',
+        tipo: 'ALTA_SOLDADURA',
+        detalle: `${modo}:${precio ?? ''}`,
         dias_estancada: t.dias,
         confirmada: true,
       })
+
+      if (esFabricacion) {
+        await insertCobroProduccion({
+          numero_orden: t.orden,
+          pieza_calendario: pieza.raw || null,
+          pieza_tarifario: pieza.matchKey,
+          puesto: t.puesto,
+          columna_tarifa: pieza.matchKey ? (modo === 'self_bent' ? 'fabri_lo_doble_yo' : 'fab_me_lo_doblaron') : 'sin_clasificar',
+          monto: precio,
+          user_id: user.id,
+          factura,
+        })
+      }
+
+      nuevasAltas.push({
+        orden: t.orden,
+        pieza: pieza.matchKey ?? pieza.raw,
+        vehiculo: t.vehiculo,
+        cliente: t.cliente,
+        factura,
+        puestoOrigen: t.puesto,
+        modo,
+        precio,
+        ocurridoEn: new Date().toISOString(),
+      })
+    }
+
+    setAltaOrdenes(prev => new Set(prev).add(t.orden))
+    setAltaMovimientos(prev => [...nuevasAltas, ...prev])
+  }
+
+  // Confirmar salida → marca confirmada y envía automáticamente a
+  // Soldadura. No hace falta un clic aparte en "Dar de Alta".
+  async function handleConfirmarSalida (t: TarjetaOrden) {
+    setConfirmando(t.orden)
+    try {
+      await moverASoldadura(t, true)
       setConfirmadas(prev => new Set(prev).add(t.orden))
       setError('')
       onChanged()
@@ -139,57 +220,13 @@ export default function OrdenesTab ({ user, onChanged, busqueda, onAlertas }: Pr
     }
   }
 
+  // Dar de Alta → mover a Soldadura. Solo existe en Fabricación (ver
+  // EtapasBoard), para tarjetas que aún no están en alerta.
   async function handleDarAlta (t: TarjetaOrden) {
     if (!t.orden) return
     setDandoAlta(t.orden)
     try {
-      // Detectar si la orden pasó por el calendario de Deivi (doblador).
-      const ordenesDeivi = new Set(
-        eventos
-          .filter(ev => {
-            const k = ev.calendario.toUpperCase().replace(/\s+/g, ' ').trim()
-            return k.includes('DEIVI') || k.includes('P-13') || k.includes('DOBLADOR')
-          })
-          .map(ev => ev.orden)
-          .filter(Boolean),
-      )
-      const modo: ModoDoblado = ordenesDeivi.has(t.orden) ? 'other_bent' : 'self_bent'
-
-      // Buscar precio en el tarifario.
-      const match = matchTarifa(t.titulo, catalogo)
-      const precio = match ? precioFabricacion(match.row, modo) : null
-
-      const detalle = `${modo}:${precio ?? ''}`
-
-      await insertMovimiento({
-        numero_orden: t.orden,
-        calendar_event_id: null,
-        calendar_name: t.puesto,
-        pieza: t.titulo || null,
-        vehiculo: t.vehiculo,
-        cliente: t.cliente,
-        desde_puesto: t.puesto,
-        hacia_puesto: 'soldadura',
-        tipo: 'ALTA_SOLDADURA',
-        detalle,
-        dias_estancada: t.dias,
-        confirmada: true,
-      })
-
-      const nuevaAlta: AltaSoldadura = {
-        orden: t.orden,
-        pieza: t.titulo || null,
-        vehiculo: t.vehiculo,
-        cliente: t.cliente,
-        factura: t.alegra?.factura ?? null,
-        puestoOrigen: t.puesto,
-        modo,
-        precio,
-        ocurridoEn: new Date().toISOString(),
-      }
-
-      setAltaOrdenes(prev => new Set(prev).add(t.orden))
-      setAltaMovimientos(prev => [nuevaAlta, ...prev])
+      await moverASoldadura(t, false)
       setEtapaActiva('soldadura')
       setError('')
       onChanged()

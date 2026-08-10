@@ -983,6 +983,40 @@ export async function insertMovimiento (row: Omit<OrdenMovimiento, 'id' | 'creat
   if (error) throw new Error(error.message)
 }
 
+// ─────────────────────────────────────────────────────────
+// cobros_produccion — una fila por pieza confirmada, con su precio.
+// Fuente de verdad del dashboard "Cobros por puesto".
+// ─────────────────────────────────────────────────────────
+export type ColumnaTarifa = 'fab_me_lo_doblaron' | 'fabri_lo_doble_yo' | 'sin_clasificar'
+
+export interface CobroProduccion {
+  id: string
+  numero_orden: string
+  pieza_calendario: string | null
+  pieza_tarifario: string | null
+  puesto: string | null
+  columna_tarifa: ColumnaTarifa | null
+  monto: number | null
+  confirmado_en: string
+  user_id: string | null
+  factura: string | null
+  created_at: string
+}
+
+export async function insertCobroProduccion (row: {
+  numero_orden: string
+  pieza_calendario: string | null
+  pieza_tarifario: string | null
+  puesto: string | null
+  columna_tarifa: ColumnaTarifa
+  monto: number | null
+  user_id: string | null
+  factura: string | null
+}): Promise<void> {
+  const { error } = await supabase.from('cobros_produccion').insert([row])
+  if (error) throw new Error(error.message)
+}
+
 // Get the latest snapshot row per order (for delta comparison)
 export async function fetchLatestSnapshotPerOrden (): Promise<Map<string, OrdenMovimiento>> {
   const { data, error } = await supabase

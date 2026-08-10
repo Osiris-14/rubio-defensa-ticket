@@ -3,11 +3,12 @@
 // (Corte · Doblado · Fabricación), órdenes agrupadas por día y
 // filtro Día / Semana / Mes.
 //
-// Puro: no toca Supabase ni el calendario. Consume los EventoArmador
-// y las facturas que ya carga la vista.
+// Puro: no toca Supabase ni el calendario. Consume los EventoArmador,
+// las facturas y el catálogo de precios que ya carga la vista.
 // ─────────────────────────────────────────────────────────
 import { type EventoArmador } from '@/lib/ordenes-core'
-import { type FacturaProduccion } from '@/lib/production-v2'
+import { type FacturaProduccion, type PriceCatalogRow } from '@/lib/production-v2'
+import { matchTarifa } from '@/lib/tarifario'
 
 export type Etapa = 'corte' | 'doblado' | 'fabricacion' | 'soldadura'
 export type Periodo = 'dia' | 'semana' | 'mes'
@@ -27,9 +28,6 @@ export const DIAS_ALERTA = 2
 // CSV trae 'PUESTO 2 ARMADOR ' (espacio final) y
 // 'EVENNOT  PUESTO 4  5PM-9PM' (espacios dobles).
 // ─────────────────────────────────────────────────────────
-// Se normalizan mayúsculas y espacios repetidos antes de comparar: el
-// CSV trae 'PUESTO 2 ARMADOR ' (espacio final) y
-// 'EVENNOT  PUESTO 4  5PM-9PM' (espacios dobles).
 function clave (calendario: string): string {
   return calendario.toUpperCase().replace(/\s+/g, ' ').trim()
 }
@@ -37,6 +35,12 @@ function clave (calendario: string): string {
 // Equivalente a ILIKE '%texto%'
 function contiene (k: string, ...fragmentos: string[]): boolean {
   return fragmentos.some(f => k.includes(f.toUpperCase()))
+}
+
+/** Equivalente a ILIKE '%ENCARGADO%' — entradas de supervisión, no de
+ *  producción. No deben mostrar botones de confirmación. */
+export function esEncargadoCalendario (calendario: string): boolean {
+  return contiene(clave(calendario), 'ENCARGADO')
 }
 
 export function rolCalendario (calendario: string): Etapa {
@@ -162,11 +166,23 @@ export interface DatosAlegra {
   pagada: boolean
 }
 
+/** Una pieza del calendario, ya emparejada (o no) contra el tarifario. */
+export interface PiezaInfo {
+  /** Texto EXACTO del calendario, tal como se escribió. */
+  raw: string
+  /** Nombre limpio del tarifario con el que casó, o null = "Sin clasificar". */
+  matchKey: string | null
+  /** Accesorios detectados que no tienen precio propio (p. ej. "Porta Pies"). */
+  accesorios: string[]
+}
+
 export interface TarjetaOrden {
   key: string
   orden: string
-  /** Título EXACTO del evento de Google Calendar, tal como se escribió. */
+  /** Título a mostrar: el nombre del tarifario si casó, si no el texto crudo. */
   titulo: string
+  /** Todas las piezas del calendario para esta orden en este día/puesto. */
+  piezas: PiezaInfo[]
   fecha: string
   puesto: string
   puestoLabel: string
@@ -176,6 +192,8 @@ export interface TarjetaOrden {
   alerta: boolean
   /** null = la orden no casó con ninguna factura de Alegra. */
   alegra: DatosAlegra | null
+  /** true = calendario 'ENCARGADO DE FABRICACION' (o similar) — solo lectura, sin botones. */
+  esEncargado: boolean
   /** Solo se llena en la pestaña Soldadura (cuando la orden fue dada de alta). */
   precio?: number | null
   modoDoblado?: 'self_bent' | 'other_bent' | null
@@ -209,11 +227,19 @@ export interface GrupoDia {
   puestos: GrupoPuesto[]
 }
 
+/** Pieza del calendario que no casó con ningún nombre del tarifario. */
+export interface SinClasificarItem {
+  texto: string
+  orden: string
+}
+
 export interface DatosEtapa {
   etapa: Etapa
   dias: GrupoDia[]
   ordenes: number
   alertas: number
+  /** Piezas de este tab que no casaron con el tarifario — para revisión manual. */
+  sinClasificar: SinClasificarItem[]
 }
 
 export interface ModeloProduccion {
@@ -225,6 +251,7 @@ export interface ModeloProduccion {
 interface BuildParams {
   eventos: EventoArmador[]
   facturas: FacturaProduccion[]
+  catalogo: PriceCatalogRow[]
   hoy: Date
   confirmadas: Set<string>
   periodo: Periodo
@@ -236,7 +263,7 @@ interface BuildParams {
 }
 
 export function buildModelo ({
-  eventos, facturas, hoy, confirmadas, periodo, filtro = '',
+  eventos, facturas, catalogo, hoy, confirmadas, periodo, filtro = '',
   altaOrdenes = new Set(), altaMovimientos = [],
 }: BuildParams): ModeloProduccion {
   const hoyISO = isoLocal(hoy)
@@ -247,9 +274,11 @@ export function buildModelo ({
   const porTalonario = new Map<string, FacturaProduccion>()
   for (const f of facturas) if (f.talonario) porTalonario.set(f.talonario, f)
 
-  // 1. Tarjetas: un evento por tarjeta. Cada evento se muestra en la
-  //    etapa de SU PROPIO calendario (sin fusionar calendarios por orden).
+  // 1. Tarjetas: un evento por tarjeta (se agrupan por orden más abajo).
+  //    Cada evento se muestra en la etapa de SU PROPIO calendario (sin
+  //    fusionar calendarios por orden).
   const porEtapa: Record<Etapa, TarjetaOrden[]> = { corte: [], doblado: [], fabricacion: [], soldadura: [] }
+  const sinClasificarPorEtapa: Record<Etapa, SinClasificarItem[]> = { corte: [], doblado: [], fabricacion: [], soldadura: [] }
 
   eventos.forEach((ev, i) => {
     const fecha = (ev.inicio || '').slice(0, 10)
@@ -262,10 +291,19 @@ export function buildModelo ({
     const factura = ev.orden ? porTalonario.get(ev.orden) ?? null : null
     const dias = diasDesde(fecha, hoyISO)
 
+    const match = matchTarifa(ev.pieza, catalogo)
+    const pieza: PiezaInfo = {
+      raw: ev.pieza || ev.titulo,
+      matchKey: match ? match.piece_name : null,
+      accesorios: match?.accesorios ?? [],
+    }
+    if (!match && pieza.raw) sinClasificarPorEtapa[etapa].push({ texto: pieza.raw, orden: ev.orden })
+
     porEtapa[etapa].push({
       key: `${ev.id || ev.orden || ev.titulo}-${i}`,
       orden: ev.orden,
-      titulo: ev.pieza,
+      titulo: pieza.matchKey ?? pieza.raw,
+      piezas: [pieza],
       fecha,
       puesto: ev.calendario,
       puestoLabel: labelPuesto(ev.calendario),
@@ -279,6 +317,7 @@ export function buildModelo ({
             pagada: factura.saldo <= UMBRAL_SALDO,
           }
         : null,
+      esEncargado: esEncargadoCalendario(ev.calendario),
     })
   })
 
@@ -289,6 +328,7 @@ export function buildModelo ({
       key: `alta-${alta.orden}-${i}`,
       orden: alta.orden,
       titulo: alta.pieza ?? '',
+      piezas: [{ raw: alta.pieza ?? '', matchKey: null, accesorios: [] }],
       fecha: (alta.ocurridoEn || '').slice(0, 10),
       puesto: alta.puestoOrigen ?? '',
       puestoLabel: alta.puestoOrigen ? labelPuesto(alta.puestoOrigen) : '—',
@@ -302,12 +342,14 @@ export function buildModelo ({
             pagada: factura ? factura.saldo <= UMBRAL_SALDO : false,
           }
         : null,
+      esEncargado: alta.puestoOrigen ? esEncargadoCalendario(alta.puestoOrigen) : false,
       precio: alta.precio,
       modoDoblado: alta.modo,
     })
   })
 
-  // 3. Agrupar por día (y por puesto dentro del día en Fabricación).
+  // 3. Agrupar por día, luego por orden dentro del día (y por puesto
+  //    dentro del día en Fabricación).
   const etapas = {} as Record<Etapa, DatosEtapa>
   for (const etapa of ETAPAS) {
     const lista = porEtapa[etapa]
@@ -321,14 +363,15 @@ export function buildModelo ({
     const dias = [...porDia.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map<GrupoDia>(([fecha, lote]) => {
-        lote.sort(comparaTarjetas)
+        const agrupado = agruparPorOrden(lote)
+        agrupado.sort(comparaTarjetas)
         return {
           fecha,
           label: labelDia(fecha, hoyISO),
           esHoy: fecha === hoyISO,
-          ordenes: new Set(lote.map(t => t.orden)).size,
-          tarjetas: lote,
-          puestos: etapa === 'fabricacion' ? agrupaPorPuesto(lote) : [],
+          ordenes: new Set(agrupado.map(t => t.orden)).size,
+          tarjetas: agrupado,
+          puestos: etapa === 'fabricacion' ? agrupaPorPuesto(agrupado) : [],
         }
       })
 
@@ -337,6 +380,7 @@ export function buildModelo ({
       dias,
       ordenes: new Set(lista.map(t => t.orden)).size,
       alertas: new Set(lista.filter(t => t.alerta).map(t => t.orden)).size,
+      sinClasificar: dedupeSinClasificar(sinClasificarPorEtapa[etapa]),
     }
   }
 
@@ -367,4 +411,44 @@ function agrupaPorPuesto (tarjetas: TarjetaOrden[]): GrupoPuesto[] {
       const pb = pesoPuesto(b.puesto)
       return pa !== pb ? pa - pb : a.puesto.localeCompare(b.puesto, 'es')
     })
+}
+
+/** El mismo número de orden puede aparecer varias veces en un calendario
+ *  (una fila por pieza). Se fusionan en una sola tarjeta por orden+puesto,
+ *  conservando cada pieza individual en `piezas`. Órdenes sin número
+ *  (no se pudo parsear del título) no se agrupan — cada evento queda como
+ *  su propia tarjeta, porque no hay una llave confiable para fusionarlas. */
+function agruparPorOrden (tarjetas: TarjetaOrden[]): TarjetaOrden[] {
+  const mapa = new Map<string, TarjetaOrden>()
+  const sueltas: TarjetaOrden[] = []
+
+  for (const t of tarjetas) {
+    if (!t.orden) { sueltas.push(t); continue }
+    const llave = `${t.puesto}||${t.orden}`
+    const existente = mapa.get(llave)
+    if (!existente) {
+      mapa.set(llave, { ...t, piezas: [...t.piezas] })
+      continue
+    }
+    existente.piezas.push(...t.piezas)
+    existente.dias = Math.max(existente.dias, t.dias)
+    existente.alerta = existente.alerta || t.alerta
+    existente.vehiculo = existente.vehiculo ?? t.vehiculo
+    existente.cliente = existente.cliente ?? t.cliente
+    existente.alegra = existente.alegra ?? t.alegra
+  }
+
+  return [...mapa.values(), ...sueltas]
+}
+
+function dedupeSinClasificar (items: SinClasificarItem[]): SinClasificarItem[] {
+  const vistos = new Set<string>()
+  const out: SinClasificarItem[] = []
+  for (const it of items) {
+    const llave = `${it.orden}||${it.texto}`
+    if (vistos.has(llave)) continue
+    vistos.add(llave)
+    out.push(it)
+  }
+  return out
 }

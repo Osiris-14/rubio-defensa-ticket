@@ -4,13 +4,16 @@
 // filtro Día/Semana/Mes y órdenes agrupadas por día.
 // Solo presentación: el modelo llega construido desde etapas.ts.
 // ─────────────────────────────────────────────────────────
+import { Fragment } from 'react'
 import type {
-  DatosEtapa, Etapa, GrupoDia, ModeloProduccion, Periodo, TarjetaOrden,
+  DatosEtapa, Etapa, GrupoDia, ModeloProduccion, Periodo, PiezaInfo, SinClasificarItem, TarjetaOrden,
 } from './etapas'
 import { ETAPAS } from './etapas'
 
 const ROJO = '#E8180A'
 const VERDE_SOLDADURA = '#1A7F5A'
+const AMBAR = '#B45309'
+const AMBAR_BG = '#FEF3C7'
 
 interface Tema {
   titulo: string
@@ -46,7 +49,7 @@ interface Props {
   onPeriodo: (p: Periodo) => void
   confirmando: string | null
   onConfirmar: (t: TarjetaOrden) => void
-  /** Dar de Alta → mover a Soldadura */
+  /** Dar de Alta → mover a Soldadura (solo Fabricación) */
   dandoAlta: string | null
   onDarAlta: (t: TarjetaOrden) => void
 }
@@ -57,6 +60,9 @@ export default function EtapasBoard ({
 }: Props) {
   const tema = TEMAS[etapaActiva]
   const datos = modelo.etapas[etapaActiva]
+  // "Dar de Alta" solo existe en Fabricación — en Corte/Doblado la
+  // transición a Soldadura ocurre automáticamente al Confirmar salida.
+  const permiteDarAlta = etapaActiva === 'fabricacion'
 
   return (
     <div>
@@ -120,6 +126,7 @@ export default function EtapasBoard ({
               tema={tema}
               conPuestos={etapaActiva === 'fabricacion'}
               esSoldadura={etapaActiva === 'soldadura'}
+              permiteDarAlta={permiteDarAlta}
               confirmando={confirmando}
               onConfirmar={onConfirmar}
               dandoAlta={dandoAlta}
@@ -128,6 +135,9 @@ export default function EtapasBoard ({
           ))
         )}
       </div>
+
+      {/* ── Piezas sin clasificar en este tab (solo lectura) */}
+      <PanelSinClasificar items={datos.sinClasificar} />
     </div>
   )
 }
@@ -177,11 +187,12 @@ function TabEtapa ({ etapa, activa, datos, onClick }: {
 }
 
 // ─────────────────────────────────────────────────────────
-function SeccionDia ({ dia, tema, conPuestos, esSoldadura, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
+function SeccionDia ({ dia, tema, conPuestos, esSoldadura, permiteDarAlta, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
   dia: GrupoDia
   tema: Tema
   conPuestos: boolean
   esSoldadura: boolean
+  permiteDarAlta: boolean
   confirmando: string | null
   onConfirmar: (t: TarjetaOrden) => void
   dandoAlta: string | null
@@ -212,20 +223,21 @@ function SeccionDia ({ dia, tema, conPuestos, esSoldadura, confirmando, onConfir
             }}>
               · {gp.puesto}
             </div>
-            <GridTarjetas tarjetas={gp.tarjetas} tema={tema} esSoldadura={false} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
+            <GridTarjetas tarjetas={gp.tarjetas} tema={tema} esSoldadura={false} permiteDarAlta={permiteDarAlta} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
           </div>
         ))
       ) : (
-        <GridTarjetas tarjetas={dia.tarjetas} tema={tema} esSoldadura={esSoldadura} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
+        <GridTarjetas tarjetas={dia.tarjetas} tema={tema} esSoldadura={esSoldadura} permiteDarAlta={permiteDarAlta} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
       )}
     </div>
   )
 }
 
-function GridTarjetas ({ tarjetas, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
+function GridTarjetas ({ tarjetas, tema, esSoldadura, permiteDarAlta, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
   tarjetas: TarjetaOrden[]
   tema: Tema
   esSoldadura: boolean
+  permiteDarAlta: boolean
   confirmando: string | null
   onConfirmar: (t: TarjetaOrden) => void
   dandoAlta: string | null
@@ -234,17 +246,55 @@ function GridTarjetas ({ tarjetas, tema, esSoldadura, confirmando, onConfirmar, 
   return (
     <div className='orden-grid'>
       {tarjetas.map(t => (
-        <Tarjeta key={t.key} t={t} tema={tema} esSoldadura={esSoldadura} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
+        <Tarjeta key={t.key} t={t} tema={tema} esSoldadura={esSoldadura} permiteDarAlta={permiteDarAlta} confirmando={confirmando} onConfirmar={onConfirmar} dandoAlta={dandoAlta} onDarAlta={onDarAlta} />
       ))}
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────
-function Tarjeta ({ t, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
+function nombrePieza (p: PiezaInfo): string {
+  const base = p.matchKey ?? p.raw
+  return p.accesorios.length ? `${base} + ${p.accesorios.join(' + ')}` : base
+}
+
+function SinClasificarBadge () {
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
+      background: AMBAR_BG, color: AMBAR, whiteSpace: 'nowrap',
+    }}>
+      Sin clasificar
+    </span>
+  )
+}
+
+function ListaPiezas ({ piezas }: { piezas: PiezaInfo[] }) {
+  return (
+    <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A', lineHeight: 1.5 }}>
+      <span style={{ fontWeight: 600, color: '#666', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+        Piezas ·{' '}
+      </span>
+      <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '4px 6px', verticalAlign: 'middle' }}>
+        {piezas.map((p, i) => (
+          <Fragment key={i}>
+            {i > 0 && <span style={{ color: '#CCC', fontWeight: 400 }}>·</span>}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {nombrePieza(p)}
+              {!p.matchKey && <SinClasificarBadge />}
+            </span>
+          </Fragment>
+        ))}
+      </span>
+    </div>
+  )
+}
+
+function Tarjeta ({ t, tema, esSoldadura, permiteDarAlta, confirmando, onConfirmar, dandoAlta, onDarAlta }: {
   t: TarjetaOrden
   tema: Tema
   esSoldadura: boolean
+  permiteDarAlta: boolean
   confirmando: string | null
   onConfirmar: (t: TarjetaOrden) => void
   dandoAlta: string | null
@@ -252,6 +302,10 @@ function Tarjeta ({ t, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, o
 }) {
   const enCurso = confirmando === t.orden
   const enAlta = dandoAlta === t.orden
+  const agrupada = t.piezas.length > 1
+  const pieza0 = t.piezas[0]
+  const muestraConfirmar = t.alerta && !esSoldadura && !t.esEncargado
+  const muestraDarAlta = !esSoldadura && !!t.orden && permiteDarAlta && !t.esEncargado
 
   return (
     <div style={{
@@ -268,10 +322,22 @@ function Tarjeta ({ t, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, o
         </div>
       )}
 
-      {/* 2. Orden + título del calendario (exacto) */}
-      <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A', lineHeight: 1.35 }}>
-        {t.orden ? `#${t.orden} · ` : ''}{t.titulo}
-      </div>
+      {/* 2. Orden + título (agrupado: cabecera con orden+vehículo; simple: orden+pieza) */}
+      {agrupada ? (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A', lineHeight: 1.35 }}>
+            {t.orden ? `#${t.orden}` : ''}{t.vehiculo ? ` — ${t.vehiculo}` : ''}
+          </div>
+          <div style={{ marginTop: 4 }}>
+            <ListaPiezas piezas={t.piezas} />
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A', lineHeight: 1.35, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span>{t.orden ? `#${t.orden} · ` : ''}{nombrePieza(pieza0)}</span>
+          {!pieza0.matchKey && <SinClasificarBadge />}
+        </div>
+      )}
 
       {/* 3. Metadatos */}
       <div style={{ fontSize: 11, color: '#666', marginTop: 6, lineHeight: 1.6 }}>
@@ -329,8 +395,15 @@ function Tarjeta ({ t, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, o
         </div>
       )}
 
-      {/* 6. Confirmar salida — solo en alertas (no en soldadura) */}
-      {t.alerta && !esSoldadura && (
+      {/* 6. Encargado: solo informativo, sin botones de acción */}
+      {t.esEncargado && !esSoldadura && (
+        <div style={{ marginTop: 8, fontSize: 10, color: '#999', fontStyle: 'italic' }}>
+          Entrada de supervisión — sin acciones
+        </div>
+      )}
+
+      {/* 7. Confirmar salida → auto-envía a Soldadura */}
+      {muestraConfirmar && (
         <button
           type='button'
           onClick={() => onConfirmar(t)}
@@ -346,8 +419,8 @@ function Tarjeta ({ t, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, o
         </button>
       )}
 
-      {/* 7. Dar de Alta → mover a Soldadura (solo si hay número de orden) */}
-      {!esSoldadura && t.orden && (
+      {/* 8. Dar de Alta → mover a Soldadura (solo Fabricación, no Encargado) */}
+      {muestraDarAlta && (
         <button
           type='button'
           onClick={() => onDarAlta(t)}
@@ -363,6 +436,37 @@ function Tarjeta ({ t, tema, esSoldadura, confirmando, onConfirmar, dandoAlta, o
         </button>
       )}
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────
+function PanelSinClasificar ({ items }: { items: SinClasificarItem[] }) {
+  if (items.length === 0) return null
+  return (
+    <details style={{ marginTop: 24 }}>
+      <summary style={{
+        cursor: 'pointer', fontSize: 12, fontWeight: 600, color: AMBAR,
+        padding: '8px 4px', userSelect: 'none',
+      }}>
+        ⚠ Piezas sin clasificar en este tab ({items.length})
+      </summary>
+      <div style={{
+        marginTop: 8, background: '#F7F7F7', border: '0.5px solid #ECECEC',
+        borderRadius: 8, padding: '12px 14px', maxHeight: 260, overflowY: 'auto',
+      }}>
+        {items.map((it, i) => (
+          <div
+            key={i}
+            style={{
+              fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+              color: '#555', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}
+          >
+            · &quot;{it.texto}&quot;{it.orden ? ` — orden #${it.orden}` : ' — sin orden'}
+          </div>
+        ))}
+      </div>
+    </details>
   )
 }
 
