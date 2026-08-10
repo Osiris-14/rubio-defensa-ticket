@@ -67,8 +67,8 @@ const PUESTOS_ORDEN = [
   'Puesto 3 Felipe',
   'Puesto 4 día',
   'Puesto 4 Noche',
-  'Encargado de Fabricación',
   'Puesto 5 Oscar',
+  'Encargado de Fabricación',
 ]
 
 export function labelPuesto (calendario: string): string {

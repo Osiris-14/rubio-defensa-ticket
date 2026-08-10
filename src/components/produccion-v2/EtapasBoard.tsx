@@ -432,7 +432,7 @@ function Tarjeta ({ t, tema, esSoldadura, permiteDarAlta, confirmando, onConfirm
             opacity: enAlta ? 0.6 : 1,
           }}
         >
-          {enAlta ? 'Dando de alta…' : '⚡ Dar de Alta → Soldadura'}
+          {enAlta ? 'Confirmando…' : '⚡ Confirmar ticket'}
         </button>
       )}
     </div>
