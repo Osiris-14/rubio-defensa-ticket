@@ -175,16 +175,23 @@ export default function OrdenesTab ({ user, onChanged, busqueda, onAlertas }: Pr
       })
 
       if (esFabricacion) {
-        await insertCobroProduccion({
-          numero_orden: t.orden,
-          pieza_calendario: pieza.raw || null,
-          pieza_tarifario: pieza.matchKey,
-          puesto: t.puesto,
-          columna_tarifa: pieza.matchKey ? (modo === 'self_bent' ? 'fabri_lo_doble_yo' : 'fab_me_lo_doblaron') : 'sin_clasificar',
-          monto: precio,
-          user_id: user.id,
-          factura,
-        })
+        // El registro de precio es contabilidad secundaria: si falla (p. ej.
+        // la tabla aún no existe en este entorno) NUNCA debe deshacer ni
+        // bloquear la confirmación/transición a Soldadura que ya se guardó.
+        try {
+          await insertCobroProduccion({
+            numero_orden: t.orden,
+            pieza_calendario: pieza.raw || null,
+            pieza_tarifario: pieza.matchKey,
+            puesto: t.puesto,
+            columna_tarifa: pieza.matchKey ? (modo === 'self_bent' ? 'fabri_lo_doble_yo' : 'fab_me_lo_doblaron') : 'sin_clasificar',
+            monto: precio,
+            user_id: user.id,
+            factura,
+          })
+        } catch (e) {
+          console.error('No se pudo registrar el cobro (no afecta la confirmación):', e)
+        }
       }
 
       nuevasAltas.push({
