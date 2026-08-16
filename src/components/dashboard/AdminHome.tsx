@@ -4,10 +4,10 @@ import { AlertCircle, LayoutDashboard, Receipt, Wallet } from 'lucide-react'
 import { AREA_THEME } from '@/lib/areaTheme'
 import { type AppUser, type UserRole, ROLE_LABELS, ROLE_COLORS, getTickets, ticketsToCSV } from '@/lib/store'
 import {
-  fetchProductionKpis, fetchPuestosCapacidad, fetchMovimientos,
-  fetchFacturasProduccion, fetchPriceCatalog, fetchProductionTickets,
-  type ProductionKpis, type PuestoCapacidad, type OrdenMovimiento,
-  type FacturaProduccion, type PriceCatalogRow, type ProductionTicket,
+  fetchProductionKpisV3, fetchPuestosCapacidad, fetchMovimientos,
+  fetchFacturasProduccion, fetchPriceCatalog,
+  type ProductionKpisV3, type PuestoCapacidad, type OrdenMovimiento,
+  type FacturaProduccion, type PriceCatalogRow,
 } from '@/lib/production-v2'
 import { fetchEventosArmador } from '@/lib/ordenes'
 import { type EventoArmador } from '@/lib/ordenes-core'
@@ -41,13 +41,12 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
 
   const [allTickets, setAllTickets] = useState<Record<string, unknown>[]>([])
   const [areaData, setAreaData] = useState<AreaDatum[]>([])
-  const [prodKpis, setProdKpis] = useState<ProductionKpis | null>(null)
+  const [prodKpis, setProdKpis] = useState<ProductionKpisV3 | null>(null)
   const [puestos, setPuestos] = useState<PuestoCapacidad[]>([])
   const [eventos, setEventos] = useState<EventoArmador[]>([])
   const [movimientos, setMovimientos] = useState<OrdenMovimiento[]>([])
   const [facturas, setFacturas] = useState<FacturaProduccion[]>([])
   const [catalogo, setCatalogo] = useState<PriceCatalogRow[]>([])
-  const [pendientes, setPendientes] = useState<ProductionTicket[]>([])
   const [loading, setLoading] = useState(true)
   const [prodLoading, setProdLoading] = useState(true)
   const [error, setError] = useState('')
@@ -102,14 +101,13 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
     // Al refrescar se conservan los datos anteriores hasta que llegan
     // los nuevos, en vez de vaciar la vista.
     Promise.allSettled([
-      fetchProductionKpis(),
+      fetchProductionKpisV3(),
       fetchPuestosCapacidad(),
       fetchEventosArmador(),
       fetchMovimientos(500),
       fetchFacturasProduccion(),
       fetchPriceCatalog(),
-      fetchProductionTickets('pendiente'),
-    ]).then(([k, pc, ev, mv, fa, cat, pt]) => {
+    ]).then(([k, pc, ev, mv, fa, cat]) => {
       if (!active) return
       if (k.status === 'fulfilled') setProdKpis(k.value)
       if (pc.status === 'fulfilled') setPuestos(pc.value)
@@ -117,7 +115,6 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
       if (mv.status === 'fulfilled') setMovimientos(mv.value)
       if (fa.status === 'fulfilled') setFacturas(fa.value)
       if (cat.status === 'fulfilled') setCatalogo(cat.value)
-      if (pt.status === 'fulfilled') setPendientes(pt.value)
       setProdLoading(false)
     })
     return () => { active = false }
@@ -212,16 +209,6 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
   const atencion: ItemAtencion[] = useMemo(() => {
     const out: ItemAtencion[] = []
 
-    for (const t of pendientes) {
-      if (t.fecha_programada && t.fecha_programada < hoyISO) {
-        out.push({
-          key: `ret-${t.id}`,
-          texto: `#${t.orden ?? t.factura ?? '—'}`,
-          detalle: `retrasada · ${t.fecha_programada}`,
-        })
-      }
-    }
-
     for (const m of estancadas) {
       const dias = Math.floor((now - new Date(m.ocurrido_en).getTime()) / 86400000)
       out.push({
@@ -240,7 +227,7 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
     }
 
     return out
-  }, [pendientes, estancadas, sobrecargados, hoyISO, now])
+  }, [estancadas, sobrecargados, now])
 
   const greeting = useMemo(() => {
     const h = new Date().getHours()

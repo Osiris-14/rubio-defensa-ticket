@@ -1,12 +1,20 @@
 // =====================================================================
-// Módulo de Producción Rediseñado — tipos + capa de lectura (cliente)
-// No toca el módulo legacy (./produccion.ts) que sigue usándose para
-// los dashboards existentes.
+// Módulo de Producción — capa de lectura/escritura (cliente).
+//
+// v3: flujo de tickets por PIEZA impulsado por las facturas de Alegra.
+// Sin calendarios, sin pasarela Corte→Doblado→Armado→Soldadura, sin
+// precios. Un ticket = una pieza de una orden, con un responsable y un
+// estado pendiente/completado.
+//
+// Se conservan las lecturas que siguen alimentando el Dashboard
+// "Resumen" (presupuesto/cobros por puesto, calculados sobre el
+// calendario de Google — sistema aparte que no se toca).
 // =====================================================================
 import { supabase } from './supabase'
 
 // ─────────────────────────────────────────────────────────
-// Tipos
+// Tipos — catálogo de precios (usado por Presupuesto/Cobros del
+// Dashboard, calculado sobre el calendario de Google — no por Producción).
 // ─────────────────────────────────────────────────────────
 
 export interface PriceCatalogRow {
@@ -23,345 +31,82 @@ export interface PriceCatalogRow {
   updated_at: string
 }
 
-export interface ProductionEmployee {
-  id: string
-  name: string
-  active: boolean
-  created_at: string
-}
+// ─────────────────────────────────────────────────────────
+// Piezas del tarifario — lista fija para el formulario "Abrir ticket".
+// No tiene relación con production_price_catalog (eso es para el
+// cálculo de presupuesto del calendario); esto es solo el catálogo de
+// nombres de pieza que puede producir el taller.
+// ─────────────────────────────────────────────────────────
+export const PIEZAS_TARIFARIO: string[] = [
+  'Juego Completo',
+  'Frente Camión / Grande',
+  'Frente Normal',
+  'Trasero',
+  'Estribos',
+  'Estribos con Tubito',
+  'Porta Escalera',
+  'Parrilla',
+  'Juego Grande (Coaster)',
+  'Trasero Grande',
+  'Juego Protector Tanque',
+  'Mini Cachucha isuzu/fuso',
+  'Cachucha KIA',
+  'Varillero',
+  'Filos de Cama',
+  'Espaldal Cama Camión',
+  'Mini Escalera',
+  'Canasto',
+  'Tubo Cabina',
+  'Maletero',
+  'Canasto NV350',
+]
 
-export interface ProductionTicket {
+// ─────────────────────────────────────────────────────────
+// Tipos — tickets de producción (v3: una fila por pieza)
+// ─────────────────────────────────────────────────────────
+
+export type EstadoTicket = 'pendiente' | 'completado'
+
+export interface ProductionTicketV3 {
   id: string
-  alegra_id: string | null
+  numero_orden: string | null
   factura: string | null
-  orden: string | null
-  cliente: string | null
-  vehiculo: string | null
-  status: 'pendiente' | 'completado'
-  // ── Pasarela secuencial: Corte → Doblado → Armado → Soldadura ──
-  etapa_actual: EtapaActual
-  corte_hecho: boolean
-  corte_motivo: string | null
-  corte_persona: string | null
-  corte_fecha: string | null
-  doblado_hecho: boolean
-  doblado_motivo: string | null
-  doblado_persona: string | null
-  doblado_fecha: string | null
-  total_cost: number
-  tipo_trabajo: 'Fabricacion' | 'Reparacion' | 'Modificacion' | null
-  grado_reparacion: 'Grado A' | 'Grado B' | 'Grado C' | null
-  re_trabajo: 'Si' | 'No' | null
-  fecha_programada: string | null
-  prioridad: 'baja' | 'normal' | 'alta' | 'critica' | null
-  fabricador_id: string | null
-  fabricador_name: string | null
-  created_by: string | null
-  created_at: string
-  completed_at: string | null
-}
-
-export interface ProductionTicketPiece {
-  id: string
-  ticket_id: string
-  piece_name: string
-  quantity: number
-  created_at: string
-}
-
-export type ProductionStep = 'fabricacion' | 'soldadura' | 'ferre' | 'pintura' | 'decoracion'
-
-export interface ProductionTicketStep {
-  id: string
-  ticket_id: string
-  piece_name: string
-  step: ProductionStep
-  employee_id: string | null
-  employee_name: string | null
-  doblador_id: string | null
-  doblador_name: string | null
-  price: number
-  started_at: string | null
-  completed_at: string | null
-  payroll_run_id: string | null
-  created_at: string
-}
-
-export interface ProductionTicketFull extends ProductionTicket {
-  pieces: ProductionTicketPiece[]
-  steps: ProductionTicketStep[]
-}
-
-// ─────────────────────────────────────────────────────────
-// Pasarela secuencial — Corte → Doblado → Armado → Soldadura
-//
-// Corte y Doblado son a nivel de ORDEN (columnas en production_tickets).
-// Armado y Soldadura son a nivel de PIEZA (production_ticket_pasarela).
-// ─────────────────────────────────────────────────────────
-
-export type EtapaPasarela = 'corte' | 'doblado' | 'armado' | 'soldadura'
-export type EtapaActual = EtapaPasarela | 'completado'
-
-// Etapas de orden (una persona por ticket) vs. de pieza (una por pieza).
-export type EtapaOrden = 'corte' | 'doblado'
-export type EtapaPieza = 'armado' | 'soldadura'
-
-export interface PersonalPasarela {
-  id: string
-  etapa: EtapaPasarela
-  nombre: string
-  activo: boolean
-  created_at: string
-}
-
-export interface TicketPasarelaPieza {
-  id: string
-  ticket_id: string
+  alegra_id: string | null
   pieza: string
-  armado_hecho: boolean
-  armado_motivo: string | null
-  armado_persona: string | null
-  armado_fecha: string | null
-  soldadura_hecho: boolean
-  soldadura_motivo: string | null
-  soldadura_persona: string | null
-  soldadura_fecha: string | null
+  responsable: string
+  estado: EstadoTicket
+  completado_en: string | null
+  user_id: string | null
+  user_name: string | null
   created_at: string
 }
 
-export interface TicketPasarelaFull extends ProductionTicket {
-  piezas: TicketPasarelaPieza[]
+const SELECT_TICKET_V3 = 'id, numero_orden, factura, alegra_id, pieza, responsable, estado, completado_en, user_id, user_name, created_at'
+
+// Producto de una factura de Alegra (columna jsonb `productos` de la vista silver).
+export interface ProductoFactura {
+  nombre: string | null
+  descripcion: string | null
+  cantidad: number | null
 }
 
-// Orden proveniente de Alegra (vista silver) aún no convertida en ticket.
-export interface OrdenProduccion {
+// Orden proveniente de Alegra (vista silver) aún sin ticket abierto.
+export interface OrdenParaTicket {
   alegra_id: string
   factura: string
   cliente: string | null
   talonario: string | null
-  vehiculo: string | null
   fecha: string
   total: number
+  total_pagado: number
   saldo: number
-  estado_cxc: 'Open' | 'Atraso' | 'Cerrado'
+  productos: ProductoFactura[]
 }
 
-export interface ProductionKpis {
-  ordenes: number
+export interface ProductionKpisV3 {
+  ordenes_activas: number
   tickets_pendientes: number
   tickets_completados: number
-  costo_hoy: number
-  costo_semana: number
-  costo_mes: number
-}
-
-export interface EmployeeProductionTotal {
-  employee_id: string
-  employee_name: string
-  step: ProductionStep
-  work_count: number
-  total_earned: number
-}
-
-export interface EmployeePendingPayment {
-  employee_id: string
-  employee_name: string
-  pending_count: number
-  pending_amount: number
-}
-
-export interface PayrollRun {
-  id: string
-  period_type: 'semanal' | 'quincenal' | 'mensual'
-  period_start: string
-  period_end: string
-  total_amount: number
-  status: 'emitida' | 'pagada' | 'anulada'
-  created_by: string | null
-  created_at: string
-}
-
-export interface PayrollDetail {
-  id: string
-  run_id: string
-  employee_id: string | null
-  employee_name: string | null
-  step: string | null
-  work_count: number
-  amount: number
-  created_at: string
-}
-
-// ─────────────────────────────────────────────────────────
-// Tipos — Planificador
-// ─────────────────────────────────────────────────────────
-
-export type Prioridad = 'baja' | 'normal' | 'alta' | 'critica'
-
-export interface AreaCapacity {
-  id: string
-  step: ProductionStep
-  daily_capacity: number
-  updated_at: string
-  updated_by: string | null
-}
-
-export interface EmployeeCapacity {
-  id: string
-  employee_id: string
-  step: ProductionStep
-  daily_capacity: number
-  updated_at: string
-  updated_by: string | null
-}
-
-export interface AreaDailyLoad {
-  fecha: string
-  step: ProductionStep
-  tickets_count: number
-  daily_capacity: number
-}
-
-export interface EmployeeDailyLoad {
-  fecha: string
-  employee_id: string
-  employee_name: string
-  step: ProductionStep
-  done_count: number
-  scheduled_count: number
-  daily_capacity: number
-}
-
-export interface CapacityDashboard {
-  tickets_hoy: number
-  cap_hoy: number
-  tickets_semana: number
-  tickets_mes: number
-  retrasados: number
-  proximos: number
-  vencidos: number
-}
-
-export interface ScheduleAudit {
-  id: string
-  ticket_id: string
-  orden: string | null
-  vehiculo: string | null
-  field: string
-  old_value: string | null
-  new_value: string | null
-  changed_by: string | null
-  reason: string | null
-  changed_at: string
-}
-
-export interface CalendarEvent {
-  id: string
-  ticket_id: string
-  orden: string | null
-  vehiculo: string | null
-  cliente: string | null
-  factura: string | null
-  fecha_programada: string | null
-  status: 'pendiente' | 'completado'
-  prioridad: Prioridad | null
-  fabricador_id: string | null
-  fabricador_name: string | null
-  tipo_trabajo: string | null
-  // Para filtrar por etapa: si el ticket ya completó cierta etapa
-  completed_steps: ProductionStep[]
-  total_pieces: number
-}
-
-// ─────────────────────────────────────────────────────────
-// Etapas (orden fijo del prompt)
-// ─────────────────────────────────────────────────────────
-export const PRODUCTION_STEPS: ProductionStep[] = ['fabricacion', 'soldadura', 'ferre', 'pintura', 'decoracion']
-
-export const STEP_LABELS: Record<ProductionStep, string> = {
-  fabricacion: 'Fabricación',
-  soldadura: 'Soldadura',
-  ferre: 'Ferré',
-  pintura: 'Pintura',
-  decoracion: 'Decoración',
-}
-
-// ─────────────────────────────────────────────────────────
-// Pasarela — orden fijo y secuencial de las 4 etapas
-// ─────────────────────────────────────────────────────────
-export const PASARELA_STAGES: EtapaPasarela[] = ['corte', 'doblado', 'armado', 'soldadura']
-
-// Etapas que se registran por pieza (las demás son por orden).
-export const ETAPAS_PIEZA: EtapaPieza[] = ['armado', 'soldadura']
-
-export const ETAPA_LABELS: Record<EtapaActual, string> = {
-  corte: 'Corte',
-  doblado: 'Doblado',
-  armado: 'Armado',
-  soldadura: 'Soldadura',
-  completado: 'Completado',
-}
-
-// Pregunta que se le hace al operario en cada etapa.
-export const ETAPA_PREGUNTA: Record<EtapaPasarela, string> = {
-  corte: '¿Cortó?',
-  doblado: '¿Dobló?',
-  armado: '¿Armó?',
-  soldadura: '¿Soldó?',
-}
-
-// Cómo se llama a quien hace cada etapa.
-export const ETAPA_PERSONA_LABEL: Record<EtapaPasarela, string> = {
-  corte: 'Cortador',
-  doblado: 'Doblador',
-  armado: 'Armador',
-  soldadura: 'Soldador',
-}
-
-export function isEtapaPieza (e: EtapaPasarela): e is EtapaPieza {
-  return e === 'armado' || e === 'soldadura'
-}
-
-// Índice de la etapa dentro de la secuencia. 'completado' va al final.
-export function etapaIndex (e: EtapaActual): number {
-  return e === 'completado' ? PASARELA_STAGES.length : PASARELA_STAGES.indexOf(e)
-}
-
-export type EtapaState = 'completada' | 'actual' | 'bloqueada'
-
-// Estado de cada etapa respecto a la etapa actual del ticket.
-export function etapaState (etapa: EtapaPasarela, actual: EtapaActual): EtapaState {
-  const i = PASARELA_STAGES.indexOf(etapa)
-  const cur = etapaIndex(actual)
-  if (i < cur) return 'completada'
-  if (i === cur) return 'actual'
-  return 'bloqueada'
-}
-
-export const PRIORIDAD_LABELS: Record<Prioridad, string> = {
-  baja: 'Baja',
-  normal: 'Normal',
-  alta: 'Alta',
-  critica: 'Crítica',
-}
-
-export const PRIORIDAD_COLORS: Record<Prioridad, { dot: string; bg: string; text: string }> = {
-  baja:     { dot: 'var(--gray-300)',  bg: 'var(--gray-100)',  text: 'var(--gray-600)' },
-  normal:   { dot: 'var(--blue)',      bg: 'var(--blue-bg)',   text: 'var(--blue)' },
-  alta:     { dot: 'var(--amber)',     bg: 'var(--amber-bg)',  text: 'var(--amber)' },
-  critica:  { dot: 'var(--red)',       bg: 'var(--red-50)',    text: 'var(--red)' },
-}
-
-// Devuelve el % de ocupación (0-100) y el color según el prompt:
-//   0–50%  → verde
-//   51–80% → amarillo
-//   81–100% → rojo
-export function occupancyLevel (count: number, capacity: number): { pct: number; tone: 'green' | 'amber' | 'red'; label: string } {
-  const cap = capacity > 0 ? capacity : 1
-  const pct = Math.min(100, Math.round((count / cap) * 100))
-  const tone: 'green' | 'amber' | 'red' = pct <= 50 ? 'green' : pct <= 80 ? 'amber' : 'red'
-  const label = `${count} / ${capacity}`
-  return { pct, tone, label }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -386,7 +131,7 @@ async function withSelfHeal<T> (fn: () => Promise<T>): Promise<T> {
 }
 
 // ─────────────────────────────────────────────────────────
-// Lecturas — catálogo y empleados
+// Lecturas — catálogo de precios (Presupuesto/Cobros del Dashboard)
 // ─────────────────────────────────────────────────────────
 
 export async function fetchPriceCatalog (): Promise<PriceCatalogRow[]> {
@@ -397,280 +142,6 @@ export async function fetchPriceCatalog (): Promise<PriceCatalogRow[]> {
   if (error) throw new Error(error.message)
   return (data ?? []).map(normalizeCatalogRow)
 }
-
-export async function fetchActivePieceNames (): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('production_price_catalog')
-    .select('piece_name')
-    .eq('active', true)
-    .order('piece_name', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []).map(r => r.piece_name as string)
-}
-
-export async function fetchProductionEmployees (activeOnly = true): Promise<ProductionEmployee[]> {
-  let q = supabase.from('production_employees').select('*').order('name', { ascending: true })
-  if (activeOnly) q = q.eq('active', true)
-  const { data, error } = await q
-  if (error) throw new Error(error.message)
-  return (data ?? []) as ProductionEmployee[]
-}
-
-// ─────────────────────────────────────────────────────────
-// Lecturas — órdenes desde Alegra (excluye las ya convertidas)
-// ─────────────────────────────────────────────────────────
-
-export async function fetchOrdenesProduccion (): Promise<OrdenProduccion[]> {
-  return withSelfHeal(async () => {
-    const { data: facturas, error } = await supabase
-      .schema('silver')
-      .from('v_facturas_produccion')
-      .select('alegra_id, factura, cliente, talonario, vehiculo, fecha, total, saldo, estado_cxc, pendiente_produccion')
-      .eq('pendiente_produccion', true)
-      .order('fecha', { ascending: false })
-    if (error) throw new Error(error.message)
-    const raw = (facturas ?? []) as Record<string, unknown>[]
-
-    // Alegra_ids ya convertidas a production_tickets
-    const { data: prodIds } = await supabase
-      .from('production_tickets')
-      .select('alegra_id')
-    const prodSet = new Set((prodIds ?? []).map(r => r.alegra_id).filter(Boolean) as string[])
-
-    // Facturas ya en tickets_produccion (legacy) para no re-procesar órdenes
-    const { data: legacy } = await supabase
-      .from('tickets_produccion')
-      .select('numero_factura')
-    const legacySet = new Set((legacy ?? []).map(r => r.numero_factura as string).filter(Boolean))
-
-    return raw
-      .filter(f => !prodSet.has(String(f.alegra_id)) && !legacySet.has(String(f.factura)))
-      .map(normalizeOrden)
-  })
-}
-
-// ─────────────────────────────────────────────────────────
-// Lecturas — tickets
-// ─────────────────────────────────────────────────────────
-
-export async function fetchProductionTickets (status?: 'pendiente' | 'completado'): Promise<ProductionTicket[]> {
-  let q = supabase.from('production_tickets').select('*')
-  if (status) q = q.eq('status', status)
-  q = q.order('created_at', { ascending: false })
-  const { data, error } = await q
-  if (error) throw new Error(error.message)
-  return (data ?? []) as ProductionTicket[]
-}
-
-export async function fetchProductionTicketFull (id: string): Promise<ProductionTicketFull | null> {
-  const { data: ticket, error } = await supabase
-    .from('production_tickets')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  if (!ticket) return null
-
-  const [pieces, steps] = await Promise.all([
-    supabase.from('production_ticket_pieces').select('*').eq('ticket_id', id).order('piece_name'),
-    supabase.from('production_ticket_steps').select('*').eq('ticket_id', id).order('created_at'),
-  ])
-  if (pieces.error) throw new Error(pieces.error.message)
-  if (steps.error) throw new Error(steps.error.message)
-
-  return { ...(ticket as ProductionTicket), pieces: (pieces.data ?? []) as ProductionTicketPiece[], steps: (steps.data ?? []) as ProductionTicketStep[] }
-}
-
-// ─────────────────────────────────────────────────────────
-// Lecturas — Pasarela
-// ─────────────────────────────────────────────────────────
-
-// Personal por etapa. Sin filtro devuelve también los desactivados
-// (la pantalla de Áreas los necesita para poder reactivarlos).
-export async function fetchPersonalPasarela (activeOnly = true): Promise<PersonalPasarela[]> {
-  let q = supabase.from('personal_pasarela').select('*')
-  if (activeOnly) q = q.eq('activo', true)
-  const { data, error } = await q.order('etapa').order('nombre')
-  if (error) throw new Error(error.message)
-  return (data ?? []) as PersonalPasarela[]
-}
-
-export async function fetchPasarelaPiezas (ticketId: string): Promise<TicketPasarelaPieza[]> {
-  const { data, error } = await supabase
-    .from('production_ticket_pasarela')
-    .select('*')
-    .eq('ticket_id', ticketId)
-    .order('created_at')
-  if (error) throw new Error(error.message)
-  return (data ?? []) as TicketPasarelaPieza[]
-}
-
-// Ticket + sus piezas de pasarela (lo que consume la vista de detalle).
-export async function fetchTicketPasarela (ticketId: string): Promise<TicketPasarelaFull | null> {
-  const { data: ticket, error } = await supabase
-    .from('production_tickets')
-    .select('*')
-    .eq('id', ticketId)
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  if (!ticket) return null
-  const piezas = await fetchPasarelaPiezas(ticketId)
-  return { ...(ticket as ProductionTicket), piezas }
-}
-
-// Piezas de varios tickets a la vez (para las tarjetas de la lista).
-export async function fetchPasarelaPiezasFor (ticketIds: string[]): Promise<Map<string, TicketPasarelaPieza[]>> {
-  const map = new Map<string, TicketPasarelaPieza[]>()
-  if (ticketIds.length === 0) return map
-  const { data, error } = await supabase
-    .from('production_ticket_pasarela')
-    .select('*')
-    .in('ticket_id', ticketIds)
-    .order('created_at')
-  if (error) throw new Error(error.message)
-  for (const row of (data ?? []) as TicketPasarelaPieza[]) {
-    const arr = map.get(row.ticket_id) ?? []
-    arr.push(row)
-    map.set(row.ticket_id, arr)
-  }
-  return map
-}
-
-// ¿Están todas las piezas de esta etapa marcadas como hechas?
-export function etapaPiezasCompleta (piezas: TicketPasarelaPieza[], etapa: EtapaPieza): boolean {
-  if (piezas.length === 0) return false
-  return piezas.every(p => (etapa === 'armado' ? p.armado_hecho : p.soldadura_hecho))
-}
-
-export function piezaHecha (p: TicketPasarelaPieza, etapa: EtapaPieza): boolean {
-  return etapa === 'armado' ? p.armado_hecho : p.soldadura_hecho
-}
-
-export function piezaPersona (p: TicketPasarelaPieza, etapa: EtapaPieza): string | null {
-  return etapa === 'armado' ? p.armado_persona : p.soldadura_persona
-}
-
-export function piezaMotivo (p: TicketPasarelaPieza, etapa: EtapaPieza): string | null {
-  return etapa === 'armado' ? p.armado_motivo : p.soldadura_motivo
-}
-
-export function piezaFecha (p: TicketPasarelaPieza, etapa: EtapaPieza): string | null {
-  return etapa === 'armado' ? p.armado_fecha : p.soldadura_fecha
-}
-
-// ─────────────────────────────────────────────────────────
-// Lecturas — KPIs
-// ─────────────────────────────────────────────────────────
-
-export async function fetchProductionKpis (): Promise<ProductionKpis> {
-  const [ordenes, kpiRes] = await Promise.all([
-    fetchOrdenesProduccion().catch(() => [] as OrdenProduccion[]),
-    supabase.from('vw_production_kpis').select('*').maybeSingle(),
-  ])
-  if (kpiRes.error) throw new Error(kpiRes.error.message)
-  const k = (kpiRes.data ?? {}) as Record<string, number>
-  return {
-    ordenes: ordenes.length,
-    tickets_pendientes: Number(k.tickets_pendientes ?? 0),
-    tickets_completados: Number(k.tickets_completados ?? 0),
-    costo_hoy: Number(k.costo_hoy ?? 0),
-    costo_semana: Number(k.costo_semana ?? 0),
-    costo_mes: Number(k.costo_mes ?? 0),
-  }
-}
-
-// ─────────────────────────────────────────────────────────
-// Lecturas — pagos / nóminas
-// ─────────────────────────────────────────────────────────
-
-export async function fetchEmployeeTotals (): Promise<EmployeeProductionTotal[]> {
-  const { data, error } = await supabase
-    .from('vw_employee_production_totals')
-    .select('*')
-    .order('employee_name', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as EmployeeProductionTotal[]
-}
-
-export async function fetchEmployeePendingPayments (): Promise<EmployeePendingPayment[]> {
-  const { data, error } = await supabase
-    .from('vw_employee_pending_payments')
-    .select('*')
-    .order('pending_amount', { ascending: false })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as EmployeePendingPayment[]
-}
-
-export async function fetchPayrollRuns (): Promise<PayrollRun[]> {
-  const { data, error } = await supabase
-    .from('production_payroll_runs')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as PayrollRun[]
-}
-
-export async function fetchPayrollRunDetails (runId: string): Promise<PayrollDetail[]> {
-  const { data, error } = await supabase
-    .from('production_payroll_details')
-    .select('*')
-    .eq('run_id', runId)
-    .order('employee_name', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as PayrollDetail[]
-}
-
-// ─────────────────────────────────────────────────────────
-// Helpers — cálculo de estado de la pasarela (en cliente)
-// ─────────────────────────────────────────────────────────
-
-export type StageState = 'completada' | 'actual' | 'pendiente'
-
-export interface StageProgress {
-  step: ProductionStep
-  state: StageState
-  donePieces: number
-  totalPieces: number
-}
-
-export function computeStageProgress (ticket: ProductionTicketFull): StageProgress[] {
-  const totalPieces = ticket.pieces.length
-  const stepsByPiece = new Map<string, Set<ProductionStep>>()
-  for (const s of ticket.steps) {
-    if (s.completed_at) {
-      if (!stepsByPiece.has(s.piece_name)) stepsByPiece.set(s.piece_name, new Set())
-      stepsByPiece.get(s.piece_name)!.add(s.step)
-    }
-  }
-  const progress: StageProgress[] = PRODUCTION_STEPS.map(step => {
-    const donePieces = ticket.pieces.filter(p => stepsByPiece.get(p.piece_name)?.has(step)).length
-    return { step, donePieces, totalPieces, state: 'pendiente' as StageState }
-  })
-  // primera etapa no completada = actual
-  let firstIncomplete = -1
-  for (let i = 0; i < progress.length; i++) {
-    if (progress[i].donePieces < progress[i].totalPieces || progress[i].totalPieces === 0) { firstIncomplete = i; break }
-  }
-  for (let i = 0; i < progress.length; i++) {
-    if (i < firstIncomplete) progress[i].state = 'completada'
-    else if (i === firstIncomplete) progress[i].state = 'actual'
-    else progress[i].state = 'pendiente'
-  }
-  if (firstIncomplete === -1) {
-    // todas completadas
-    for (const p of progress) p.state = 'completada'
-  }
-  return progress
-}
-
-export function ticketIsReadyToClose (ticket: ProductionTicketFull): boolean {
-  const progress = computeStageProgress(ticket)
-  return progress.every(p => p.totalPieces > 0 && p.donePieces === p.totalPieces)
-}
-
-// ─────────────────────────────────────────────────────────
-// Normalizadores
-// ─────────────────────────────────────────────────────────
 
 function normalizeCatalogRow (r: Record<string, unknown>): PriceCatalogRow {
   return {
@@ -688,218 +159,112 @@ function normalizeCatalogRow (r: Record<string, unknown>): PriceCatalogRow {
   }
 }
 
-function normalizeOrden (r: Record<string, unknown>): OrdenProduccion {
+// ─────────────────────────────────────────────────────────
+// Lecturas — órdenes de Alegra listas para abrir ticket
+// (tab "Órdenes"). Desde el 13 de agosto de 2026 en adelante, sin
+// tope superior. Excluye órdenes que ya tienen al menos un ticket
+// (pendiente o completado) en production_tickets.
+// ─────────────────────────────────────────────────────────
+
+const FECHA_DESDE_ORDENES = '2026-08-13'
+
+export async function fetchOrdenesParaTicket (): Promise<OrdenParaTicket[]> {
+  return withSelfHeal(async () => {
+    const { data: facturas, error } = await supabase
+      .schema('silver')
+      .from('v_facturas_produccion')
+      .select('alegra_id, factura, cliente, talonario, fecha, total, total_pagado, saldo, productos')
+      .gte('fecha', FECHA_DESDE_ORDENES)
+      .order('fecha', { ascending: false })
+    if (error) throw new Error(error.message)
+    const raw = (facturas ?? []) as Record<string, unknown>[]
+
+    const { data: existentes, error: existentesError } = await supabase
+      .from('production_tickets')
+      .select('alegra_id')
+    if (existentesError) throw new Error(existentesError.message)
+    const conTicket = new Set((existentes ?? []).map(r => r.alegra_id).filter(Boolean) as string[])
+
+    return raw
+      .filter(f => !conTicket.has(String(f.alegra_id)))
+      .map(normalizeOrdenParaTicket)
+  })
+}
+
+function normalizeOrdenParaTicket (r: Record<string, unknown>): OrdenParaTicket {
+  const productosRaw = Array.isArray(r.productos) ? r.productos as Record<string, unknown>[] : []
   return {
     alegra_id: String(r.alegra_id ?? ''),
     factura: String(r.factura ?? ''),
     cliente: (r.cliente as string | null) ?? null,
     talonario: (r.talonario as string | null) ?? null,
-    vehiculo: (r.vehiculo as string | null) ?? null,
     fecha: String(r.fecha ?? ''),
     total: Number(r.total ?? 0),
+    total_pagado: Number(r.total_pagado ?? 0),
     saldo: Number(r.saldo ?? 0),
-    estado_cxc: (r.estado_cxc as OrdenProduccion['estado_cxc']) ?? 'Open',
+    productos: productosRaw.map(p => ({
+      nombre: (p.nombre as string | null) ?? null,
+      descripcion: (p.descripcion as string | null) ?? null,
+      cantidad: p.cantidad != null ? Number(p.cantidad) : null,
+    })),
   }
 }
 
 // ─────────────────────────────────────────────────────────
-// Lecturas — Planificador
+// Lecturas — tickets de producción (v3, por pieza)
 // ─────────────────────────────────────────────────────────
 
-export async function fetchAreaCapacities (): Promise<AreaCapacity[]> {
-  const { data, error } = await supabase
-    .from('production_area_capacities')
-    .select('*')
-    .order('step', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as AreaCapacity[]
-}
-
-export async function fetchAreaCapacity (step: ProductionStep): Promise<number> {
-  const { data, error } = await supabase
-    .from('production_area_capacities')
-    .select('daily_capacity')
-    .eq('step', step)
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  return data?.daily_capacity ?? 10
-}
-
-export async function fetchEmployeeCapacities (): Promise<EmployeeCapacity[]> {
-  const { data, error } = await supabase
-    .from('production_employee_capacities')
-    .select('*')
-    .order('employee_id', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as EmployeeCapacity[]
-}
-
-// Ocupación diaria por área en un rango de fechas [from, to] inclusive.
-// Devuelve un mapa por 'fecha|step' → load.
-export async function fetchAreaDailyLoadInRange (from: string, to: string): Promise<AreaDailyLoad[]> {
-  const { data, error } = await supabase
-    .from('vw_area_daily_load')
-    .select('*')
-    .gte('fecha', from)
-    .lte('fecha', to)
-    .order('fecha', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as AreaDailyLoad[]
-}
-
-export async function fetchEmployeeDailyLoadInRange (from: string, to: string): Promise<EmployeeDailyLoad[]> {
-  const { data, error } = await supabase
-    .from('vw_employee_daily_load')
-    .select('*')
-    .gte('fecha', from)
-    .lte('fecha', to)
-    .order('fecha', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as EmployeeDailyLoad[]
-}
-
-export async function fetchCapacityDashboard (): Promise<CapacityDashboard> {
-  const { data, error } = await supabase
-    .from('vw_capacity_dashboard')
-    .select('*')
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  const d = (data ?? {}) as Record<string, number>
-  return {
-    tickets_hoy: Number(d.tickets_hoy ?? 0),
-    cap_hoy: Number(d.cap_hoy ?? 0),
-    tickets_semana: Number(d.tickets_semana ?? 0),
-    tickets_mes: Number(d.tickets_mes ?? 0),
-    retrasados: Number(d.retrasados ?? 0),
-    proximos: Number(d.proximos ?? 0),
-    vencidos: Number(d.vencidos ?? 0),
-  }
-}
-
-export async function fetchScheduleAudit (ticketId?: string): Promise<ScheduleAudit[]> {
-  let q = supabase.from('vw_schedule_audit').select('*')
-  if (ticketId) q = q.eq('ticket_id', ticketId)
-  q = q.order('changed_at', { ascending: false }).limit(200)
+export async function fetchProductionTicketsV3 (estado?: EstadoTicket): Promise<ProductionTicketV3[]> {
+  let q = supabase.from('production_tickets').select(SELECT_TICKET_V3)
+  if (estado) q = q.eq('estado', estado)
+  q = q.order('created_at', { ascending: false })
   const { data, error } = await q
   if (error) throw new Error(error.message)
-  return (data ?? []) as ScheduleAudit[]
+  return (data ?? []) as unknown as ProductionTicketV3[]
 }
 
-// Eventos del calendario: tickets con fecha_programada o completados
-// (para mostrar también los completados en su fecha de completed_at).
-export async function fetchCalendarEvents (from: string, to: string): Promise<CalendarEvent[]> {
-  const { data: tickets, error } = await supabase
+// Todos los tickets agrupados por alegra_id — para detectar qué
+// órdenes están 100% completadas (tab "Órdenes Completadas").
+export async function fetchOrdenesCompletadas (): Promise<Map<string, ProductionTicketV3[]>> {
+  const { data, error } = await supabase
     .from('production_tickets')
-    .select('*')
-    .or(`and(fecha_programada.gte.${from},fecha_programada.lte.${to}),and(completed_at.gte.${from},completed_at.lte.${to})`)
-    .order('fecha_programada', { ascending: true, nullsFirst: false })
+    .select(SELECT_TICKET_V3)
+    .order('created_at', { ascending: true })
   if (error) throw new Error(error.message)
-  if (!tickets || tickets.length === 0) return []
+  const rows = (data ?? []) as unknown as ProductionTicketV3[]
 
-  const ticketIds = tickets.map(t => t.id)
-  const [piecesRes, stepsRes] = await Promise.all([
-    supabase.from('production_ticket_pieces').select('ticket_id, piece_name').in('ticket_id', ticketIds),
-    supabase.from('production_ticket_steps').select('ticket_id, step, completed_at').in('ticket_id', ticketIds),
-  ])
-  if (piecesRes.error) throw new Error(piecesRes.error.message)
-  if (stepsRes.error) throw new Error(stepsRes.error.message)
-
-  const piecesMap = new Map<string, number>()
-  for (const p of piecesRes.data ?? []) {
-    piecesMap.set(p.ticket_id as string, (piecesMap.get(p.ticket_id as string) ?? 0) + 1)
+  const porOrden = new Map<string, ProductionTicketV3[]>()
+  for (const t of rows) {
+    const key = t.alegra_id ?? t.id
+    const arr = porOrden.get(key) ?? []
+    arr.push(t)
+    porOrden.set(key, arr)
   }
-  const stepsMap = new Map<string, ProductionStep[]>()
-  for (const s of stepsRes.data ?? []) {
-    if (!s.completed_at) continue
-    const arr = stepsMap.get(s.ticket_id as string) ?? []
-    arr.push(s.step as ProductionStep)
-    stepsMap.set(s.ticket_id as string, arr)
+  for (const [key, piezas] of porOrden) {
+    if (!piezas.every(p => p.estado === 'completado')) porOrden.delete(key)
   }
-
-  return tickets.map(t => ({
-    id: t.id as string,
-    ticket_id: t.id as string,
-    orden: (t.orden as string | null) ?? null,
-    vehiculo: (t.vehiculo as string | null) ?? null,
-    cliente: (t.cliente as string | null) ?? null,
-    factura: (t.factura as string | null) ?? null,
-    fecha_programada: (t.fecha_programada as string | null) ?? null,
-    status: t.status as 'pendiente' | 'completado',
-    prioridad: (t.prioridad as Prioridad | null) ?? null,
-    fabricador_id: (t.fabricador_id as string | null) ?? null,
-    fabricador_name: (t.fabricador_name as string | null) ?? null,
-    tipo_trabajo: (t.tipo_trabajo as string | null) ?? null,
-    completed_steps: stepsMap.get(t.id as string) ?? [],
-    total_pieces: piecesMap.get(t.id as string) ?? 0,
-  }))
+  return porOrden
 }
 
-// Carga de fabricación para una fecha específica (para el calendario del modal)
-export async function fetchFabricacionLoadForDate (fecha: string): Promise<{ count: number; capacity: number }> {
-  const capacity = await fetchAreaCapacity('fabricacion')
-  const { count, error } = await supabase
+export async function fetchProductionKpisV3 (): Promise<ProductionKpisV3> {
+  const { data, error } = await supabase
     .from('production_tickets')
-    .select('*', { count: 'exact', head: true })
-    .eq('fecha_programada', fecha)
-    .eq('status', 'pendiente')
+    .select('numero_orden, alegra_id, estado')
   if (error) throw new Error(error.message)
-  return { count: count ?? 0, capacity }
-}
-
-// Carga de un empleado para una fecha (tickets de fabricación programados)
-export async function fetchEmployeeLoadForDate (employeeId: string, fecha: string): Promise<{ count: number; capacity: number }> {
-  const { data: capRow } = await supabase
-    .from('production_employee_capacities')
-    .select('daily_capacity')
-    .eq('employee_id', employeeId)
-    .eq('step', 'fabricacion')
-    .maybeSingle()
-  const capacity = capRow?.daily_capacity ?? 5
-  const { count, error } = await supabase
-    .from('production_tickets')
-    .select('*', { count: 'exact', head: true })
-    .eq('fabricador_id', employeeId)
-    .eq('fecha_programada', fecha)
-    .eq('status', 'pendiente')
-  if (error) throw new Error(error.message)
-  return { count: count ?? 0, capacity }
+  const rows = (data ?? []) as { numero_orden: string | null; alegra_id: string | null; estado: EstadoTicket }[]
+  const pendientes = rows.filter(r => r.estado === 'pendiente')
+  const ordenesActivas = new Set(pendientes.map(r => r.alegra_id ?? r.numero_orden))
+  return {
+    ordenes_activas: ordenesActivas.size,
+    tickets_pendientes: pendientes.length,
+    tickets_completados: rows.length - pendientes.length,
+  }
 }
 
 // ─────────────────────────────────────────────────────────
-// Sprint 1: puesto_capacidad + orden_movimientos
-// ─────────────────────────────────────────────────────────
-
-export interface PuestoCapacidad {
-  id: string
-  puesto: string
-  limite_diario: number | null
-  activo: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface OrdenMovimiento {
-  id: string
-  numero_orden: string
-  calendar_event_id: string | null
-  calendar_name: string | null
-  pieza: string | null
-  vehiculo: string | null
-  cliente: string | null
-  desde_puesto: string | null
-  hacia_puesto: string
-  tipo: 'ENTRADA' | 'CAMBIO_PUESTO' | 'SALIDA' | 'ESTANCADA' | string
-  detalle: string | null
-  dias_estancada: number
-  confirmada: boolean
-  ocurrido_en: string
-  created_at: string
-}
-
-// ─────────────────────────────────────────────────────────
-// Facturas con las columnas de dinero (para el Dashboard: Cobrado,
-// Pendiente cobrar, Facturado por orden). La vista silver ya existe;
-// aquí solo se leen las columnas que el dashboard necesita.
+// Tipos — Facturas con las columnas de dinero (Dashboard: Cobrado,
+// Pendiente cobrar; y cruce con cliente/factura en las tarjetas de
+// tickets de Producción).
 // ─────────────────────────────────────────────────────────
 export interface FacturaProduccion {
   alegra_id: string
@@ -940,6 +305,40 @@ export async function fetchFacturasProduccion (): Promise<FacturaProduccion[]> {
   })
 }
 
+// ─────────────────────────────────────────────────────────
+// Sprint 1: puesto_capacidad + orden_movimientos
+// Sistema alimentado por el sync de Google Calendar (separado de
+// Producción/production_tickets). Sigue usándose en el Dashboard
+// "Resumen" (estancadas, capacidad por área) — no se toca.
+// ─────────────────────────────────────────────────────────
+
+export interface PuestoCapacidad {
+  id: string
+  puesto: string
+  limite_diario: number | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface OrdenMovimiento {
+  id: string
+  numero_orden: string
+  calendar_event_id: string | null
+  calendar_name: string | null
+  pieza: string | null
+  vehiculo: string | null
+  cliente: string | null
+  desde_puesto: string | null
+  hacia_puesto: string
+  tipo: 'ENTRADA' | 'CAMBIO_PUESTO' | 'SALIDA' | 'ESTANCADA' | string
+  detalle: string | null
+  dias_estancada: number
+  confirmada: boolean
+  ocurrido_en: string
+  created_at: string
+}
+
 export async function fetchPuestosCapacidad (): Promise<PuestoCapacidad[]> {
   const { data, error } = await supabase
     .from('puesto_capacidad')
@@ -950,14 +349,6 @@ export async function fetchPuestosCapacidad (): Promise<PuestoCapacidad[]> {
   return (data ?? []) as PuestoCapacidad[]
 }
 
-export async function updatePuestoLimiteDiario (puesto: string, limiteDiario: number | null): Promise<void> {
-  const { error } = await supabase
-    .from('puesto_capacidad')
-    .update({ limite_diario: limiteDiario, updated_at: new Date().toISOString() })
-    .eq('puesto', puesto)
-  if (error) throw new Error(error.message)
-}
-
 export async function fetchMovimientos (limit = 200): Promise<OrdenMovimiento[]> {
   const { data, error } = await supabase
     .from('orden_movimientos')
@@ -966,68 +357,4 @@ export async function fetchMovimientos (limit = 200): Promise<OrdenMovimiento[]>
     .limit(limit)
   if (error) throw new Error(error.message)
   return (data ?? []) as OrdenMovimiento[]
-}
-
-export async function fetchMovimientosRecent (since: string): Promise<OrdenMovimiento[]> {
-  const { data, error } = await supabase
-    .from('orden_movimientos')
-    .select('*')
-    .gte('ocurrido_en', since)
-    .order('ocurrido_en', { ascending: false })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as OrdenMovimiento[]
-}
-
-export async function insertMovimiento (row: Omit<OrdenMovimiento, 'id' | 'created_at' | 'ocurrido_en'>): Promise<void> {
-  const { error } = await supabase.from('orden_movimientos').insert([row])
-  if (error) throw new Error(error.message)
-}
-
-// ─────────────────────────────────────────────────────────
-// cobros_produccion — una fila por pieza confirmada, con su precio.
-// Fuente de verdad del dashboard "Cobros por puesto".
-// ─────────────────────────────────────────────────────────
-export type ColumnaTarifa = 'fab_me_lo_doblaron' | 'fabri_lo_doble_yo' | 'sin_clasificar'
-
-export interface CobroProduccion {
-  id: string
-  numero_orden: string
-  pieza_calendario: string | null
-  pieza_tarifario: string | null
-  puesto: string | null
-  columna_tarifa: ColumnaTarifa | null
-  monto: number | null
-  confirmado_en: string
-  user_id: string | null
-  factura: string | null
-  created_at: string
-}
-
-export async function insertCobroProduccion (row: {
-  numero_orden: string
-  pieza_calendario: string | null
-  pieza_tarifario: string | null
-  puesto: string | null
-  columna_tarifa: ColumnaTarifa
-  monto: number | null
-  user_id: string | null
-  factura: string | null
-}): Promise<void> {
-  const { error } = await supabase.from('cobros_produccion').insert([row])
-  if (error) throw new Error(error.message)
-}
-
-// Get the latest snapshot row per order (for delta comparison)
-export async function fetchLatestSnapshotPerOrden (): Promise<Map<string, OrdenMovimiento>> {
-  const { data, error } = await supabase
-    .from('orden_movimientos')
-    .select('*')
-    .in('tipo', ['ENTRADA', 'CAMBIO_PUESTO'])
-    .order('ocurrido_en', { ascending: false })
-  if (error) throw new Error(error.message)
-  const map = new Map<string, OrdenMovimiento>()
-  for (const row of (data ?? []) as OrdenMovimiento[]) {
-    if (!map.has(row.numero_orden)) map.set(row.numero_orden, row)
-  }
-  return map
 }

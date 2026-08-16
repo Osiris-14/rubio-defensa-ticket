@@ -1,44 +1,34 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { ChevronRight, AlertCircle, Calendar, Loader2 } from 'lucide-react'
+import { useState, useEffect, useMemo, useTransition } from 'react'
+import { AlertCircle, Calendar, CheckCircle2, Loader2, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
-  fetchProductionTickets,
-  fetchPasarelaPiezasFor,
-  etapaState,
-  etapaIndex,
-  piezaHecha,
-  PASARELA_STAGES,
-  ETAPA_LABELS,
-  type ProductionTicket,
-  type TicketPasarelaPieza,
+  fetchProductionTicketsV3,
+  fetchFacturasProduccion,
+  type ProductionTicketV3,
+  type FacturaProduccion,
 } from '@/lib/production-v2'
+import { completarTicketProduccion } from '@/app/actions/production'
 import { friendlyError } from '@/lib/errorMessages'
-import TicketPasarela from './TicketPasarela'
 
-interface Props {
-  user: { id: string; name: string; role: string }
-  onChanged: () => void
-}
-
-export default function TicketsPendientesTab ({ user, onChanged }: Props) {
-  const [tickets, setTickets] = useState<ProductionTicket[]>([])
-  const [piezasMap, setPiezasMap] = useState<Map<string, TicketPasarelaPieza[]>>(new Map())
+export default function TicketsPendientesTab () {
+  const [tickets, setTickets] = useState<ProductionTicketV3[]>([])
+  const [facturas, setFacturas] = useState<FacturaProduccion[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
     async function load () {
       try {
-        const t = await fetchProductionTickets('pendiente')
+        const [t, f] = await Promise.all([
+          fetchProductionTicketsV3('pendiente'),
+          fetchFacturasProduccion().catch(() => [] as FacturaProduccion[]),
+        ])
         if (!active) return
         setTickets(t)
-        const map = await fetchPasarelaPiezasFor(t.map(x => x.id))
-        if (!active) return
-        setPiezasMap(map)
+        setFacturas(f)
         setError('')
       } catch (e) {
         if (active) setError(friendlyError(e))
@@ -50,30 +40,42 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
     return () => { active = false }
   }, [reloadKey])
 
-  // Realtime: los cambios de etapa se reflejan en vivo en la lista.
+  // Realtime: los tickets nuevos/completados se reflejan en vivo.
   useEffect(() => {
-    const channel = supabase.channel(`pendientes-${Math.random().toString(36).slice(2)}`)
+    const channel = supabase.channel(`pendientes-v3-${Math.random().toString(36).slice(2)}`)
     channel.on('postgres_changes',
       { event: '*', schema: 'public', table: 'production_tickets' },
-      () => setReloadKey(k => k + 1))
-    channel.on('postgres_changes',
-      { event: '*', schema: 'public', table: 'production_ticket_pasarela' },
       () => setReloadKey(k => k + 1))
     channel.subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  if (selectedId) {
-    return (
-      <TicketPasarela
-        ticketId={selectedId}
-        user={user}
-        onBack={() => { setSelectedId(null); setReloadKey(k => k + 1); onChanged() }}
-      />
-    )
+  const clientePorAlegra = useMemo(() => {
+    const map = new Map<string, FacturaProduccion>()
+    for (const f of facturas) map.set(f.alegra_id, f)
+    return map
+  }, [facturas])
+
+  const grupos = useMemo(() => {
+    const map = new Map<string, ProductionTicketV3[]>()
+    for (const t of tickets) {
+      const key = t.responsable || 'Sin asignar'
+      const arr = map.get(key) ?? []
+      arr.push(t)
+      map.set(key, arr)
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'))
+  }, [tickets])
+
+  function marcarCompletado (id: string) {
+    setTickets(prev => prev.filter(t => t.id !== id))
+    completarTicketProduccion(id).catch(e => {
+      setError(friendlyError(e))
+      setReloadKey(k => k + 1)
+    })
   }
 
-  if (loading) return <LoadingState message='Cargando tickets…' />
+  if (loading) return <LoadingState message='Cargando tickets pendientes…' />
 
   if (error) {
     return (
@@ -90,128 +92,84 @@ export default function TicketsPendientesTab ({ user, onChanged }: Props) {
   if (tickets.length === 0) {
     return (
       <EmptyState
-        title='No hay trabajos en proceso'
-        description='Cuando abras una orden en la pestaña Órdenes, el trabajo aparecerá aquí en la etapa de Corte.'
+        title='No hay piezas pendientes'
+        description='Cuando abras un ticket desde una orden, las piezas aparecerán aquí agrupadas por responsable.'
       />
     )
   }
 
   return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16,
-    }}>
-      {tickets.map(t => (
-        <TicketCard
-          key={t.id}
-          ticket={t}
-          piezas={piezasMap.get(t.id) ?? []}
-          onClick={() => setSelectedId(t.id)}
-        />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+      {grupos.map(([responsable, piezas]) => (
+        <div key={responsable}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{
+              width: 28, height: 28, borderRadius: '50%', background: 'var(--red-50)', color: 'var(--red)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <User size={14} />
+            </span>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--gray-900)', margin: 0 }}>{responsable}</h3>
+            <span style={{
+              fontSize: 11.5, fontWeight: 700, color: 'var(--gray-500)',
+              background: 'var(--gray-100)', padding: '2px 9px', borderRadius: 9999,
+            }}>
+              {piezas.length}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+            {piezas.map(t => (
+              <PiezaCard
+                key={t.id}
+                ticket={t}
+                cliente={t.alegra_id ? clientePorAlegra.get(t.alegra_id)?.cliente ?? null : null}
+                onCompletar={() => marcarCompletado(t.id)}
+              />
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────
-// Tarjeta de ticket en proceso, con su etapa actual
-// ─────────────────────────────────────────────────────────
-function TicketCard ({ ticket, piezas, onClick }: {
-  ticket: ProductionTicket
-  piezas: TicketPasarelaPieza[]
-  onClick: () => void
+function PiezaCard ({ ticket, cliente, onCompletar }: {
+  ticket: ProductionTicketV3
+  cliente: string | null
+  onCompletar: () => void
 }) {
-  const actual = ticket.etapa_actual
-  const done = etapaIndex(actual)
-
-  // En Armado/Soldadura mostramos además cuántas piezas van.
-  let detalle = ''
-  if ((actual === 'armado' || actual === 'soldadura') && piezas.length > 0) {
-    const listas = piezas.filter(p => piezaHecha(p, actual)).length
-    detalle = ` · ${listas} de ${piezas.length} piezas`
-  }
+  const [pending, startTransition] = useTransition()
 
   return (
-    <div className='card' style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ padding: '22px 22px 18px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Badge de etapa actual */}
-        <div style={{ marginBottom: 10 }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '4px 12px', background: 'var(--red-50)', color: 'var(--red)',
-            borderRadius: 9999, fontSize: 12, fontWeight: 700,
-            textTransform: 'uppercase' as const, letterSpacing: '0.05em',
-          }}>
-            En {ETAPA_LABELS[actual]}
-          </span>
-        </div>
-
-        <div style={{
-          fontSize: 24, fontWeight: 700, color: 'var(--gray-900)',
-          letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 4,
-        }}>
-          {ticket.vehiculo ?? 'Sin vehículo'}
-        </div>
-        <div style={{ fontSize: 13.5, color: 'var(--gray-500)', marginBottom: 14 }}>
-          Orden #{ticket.orden ?? '—'} · {ticket.cliente ?? 'Cliente —'}
-        </div>
-
-        {ticket.fecha_programada && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
-            padding: '4px 12px', background: 'var(--gray-100)', color: 'var(--gray-600)',
-            borderRadius: 9999, fontSize: 12.5, fontWeight: 700, marginBottom: 14,
-          }}>
-            <Calendar size={12} /> {formatDateFriendly(ticket.fecha_programada)}
-          </div>
-        )}
-
-        {/* Barra de las 4 etapas */}
-        <div style={{ marginTop: 'auto' }}>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-            {PASARELA_STAGES.map(etapa => {
-              const st = etapaState(etapa, actual)
-              return (
-                <div
-                  key={etapa}
-                  title={ETAPA_LABELS[etapa]}
-                  style={{
-                    flex: 1, height: 8, borderRadius: 4,
-                    background: st === 'completada' ? 'var(--green)' : st === 'actual' ? 'var(--red)' : 'var(--gray-100)',
-                    transition: 'background 0.2s',
-                  }}
-                />
-              )
-            })}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--gray-600)', fontWeight: 600, marginBottom: 16 }}>
-            {done} de {PASARELA_STAGES.length} etapas
-            <span style={{ color: 'var(--gray-500)', fontWeight: 500 }}>{detalle}</span>
-          </div>
-        </div>
-
-        <button
-          onClick={onClick}
-          className='btn btn-primary'
-          style={{ width: '100%', height: 48, fontSize: 15, fontWeight: 700 }}
-        >
-          Continuar <ChevronRight size={16} strokeWidth={2.25} />
-        </button>
+    <div className='card' style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' as const }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--gray-900)' }}>#{ticket.numero_orden || '—'}</span>
+        <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>{ticket.factura ?? ''}</span>
       </div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--red)' }}>{ticket.pieza}</div>
+      <div style={{ fontSize: 13, color: 'var(--gray-600)' }}>{cliente ?? 'Cliente —'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gray-500)' }}>
+        <Calendar size={12} /> {formatDate(ticket.created_at)}
+      </div>
+      <button
+        onClick={() => startTransition(onCompletar)}
+        disabled={pending}
+        className='btn'
+        style={{
+          marginTop: 4, height: 42, fontSize: 13.5, fontWeight: 700,
+          background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-ring)',
+        }}
+      >
+        <CheckCircle2 size={15} /> {pending ? 'Guardando…' : 'Marcar completado'}
+      </button>
     </div>
   )
 }
 
-function formatDateFriendly (iso: string): string {
-  const d = new Date(iso + 'T00:00:00')
-  if (isNaN(d.getTime())) return iso
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const target = new Date(d); target.setHours(0, 0, 0, 0)
-  const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000)
-  const fecha = d.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'short' })
-  if (diffDays === 0) return `Hoy · ${fecha}`
-  if (diffDays === 1) return `Mañana · ${fecha}`
-  if (diffDays < 0) return `Atrasado · ${fecha}`
-  return fecha
+function formatDate (iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('es-DO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function LoadingState ({ message }: { message: string }) {

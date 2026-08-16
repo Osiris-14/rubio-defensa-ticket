@@ -2,10 +2,9 @@
 // ─────────────────────────────────────────────────────────
 // Dashboard · hoja "Resumen"
 // ─────────────────────────────────────────────────────────
-import { Package, Wallet, TrendingUp, AlertTriangle, type LucideIcon } from 'lucide-react'
-import { type ProductionKpis } from '@/lib/production-v2'
+import { Package, TrendingUp, AlertTriangle, CheckCircle2, type LucideIcon } from 'lucide-react'
+import { type ProductionKpisV3 } from '@/lib/production-v2'
 import { formatoMoneda } from '@/lib/tarifario'
-import MiniCalendarWidget from './MiniCalendarWidget'
 import { type DashboardView } from './QuickActions'
 
 export interface ItemAtencion {
@@ -25,7 +24,7 @@ export interface FilaCapacidad {
 
 interface Props {
   loading: boolean
-  prodKpis: ProductionKpis | null
+  prodKpis: ProductionKpisV3 | null
   cobrado: number | null
   pendienteCobrar: number | null
   estancadas: number
@@ -49,15 +48,15 @@ export default function ResumenTab ({
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
         <MetricCard
           label='Órdenes activas'
-          value={prodKpis ? String(prodKpis.tickets_pendientes) : '—'}
+          value={prodKpis ? String(prodKpis.ordenes_activas) : '—'}
           icon={Package}
           onClick={() => onNavigate('produccion')}
         />
         <MetricCard
-          label='Costo producción (mes)'
-          value={prodKpis ? formatoMoneda(prodKpis.costo_mes) : '—'}
-          icon={Wallet}
-          onClick={() => onNavigate('pagos')}
+          label='Piezas completadas'
+          value={prodKpis ? String(prodKpis.tickets_completados) : '—'}
+          icon={CheckCircle2}
+          onClick={() => onNavigate('produccion')}
         />
         <MetricCard
           label='Cobrado'
@@ -81,7 +80,7 @@ export default function ResumenTab ({
         <Panel>
           <PanelHeader title='Producción' onLink={() => onNavigate('produccion')} linkLabel='Ver más →' />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <MiniMetric label='Órdenes' value={prodKpis ? String(prodKpis.ordenes) : '—'} />
+            <MiniMetric label='Órdenes' value={prodKpis ? String(prodKpis.ordenes_activas) : '—'} />
             <MiniMetric
               label='Pendientes'
               value={prodKpis ? String(prodKpis.tickets_pendientes) : '—'}
@@ -133,42 +132,28 @@ export default function ResumenTab ({
                 </div>
               ))}
               {atencion.length > 5 && (
-                <button
-                  onClick={() => onNavigate('movimientos')}
-                  style={{
-                    marginTop: 4, alignSelf: 'flex-start', background: 'none', border: 'none',
-                    color: '#E8180A', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0,
-                  }}
-                >
-                  Ver todas →
-                </button>
+                <div style={{ marginTop: 4, fontSize: 11.5, color: '#B4635C' }}>
+                  +{atencion.length - 5} más
+                </div>
               )}
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Fila 3: Próximos 7 días + Capacidad por área */}
-      <div className='dash-row'>
-        <MiniCalendarWidget onOpenCalendar={() => onNavigate('calendario')} />
-
+      {/* ── Fila 3: Capacidad por área */}
+      <div style={{ maxWidth: 420 }}>
         <Panel>
-          <PanelHeader title='Capacidad por área' onLink={() => onNavigate('capacidad')} linkLabel='Configurar →' />
+          <h3 style={{ fontSize: 13.5, fontWeight: 700, color: '#1A1A1A', margin: '0 0 12px' }}>Capacidad por área</h3>
 
           {capacidad.length === 0 ? (
             <div style={{ fontSize: 12, color: '#999', padding: '20px 0', textAlign: 'center' }}>
               No hay puestos configurados.
             </div>
           ) : sinLimites ? (
-            <button
-              onClick={() => onNavigate('capacidad')}
-              style={{
-                background: 'none', border: 'none', padding: '20px 0', cursor: 'pointer',
-                fontSize: 12.5, color: '#999', textAlign: 'left',
-              }}
-            >
-              Sin límites configurados — ir a Capacidad →
-            </button>
+            <div style={{ padding: '20px 0', fontSize: 12.5, color: '#999' }}>
+              Sin límites configurados.
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {capacidad.map(c => (

@@ -1,21 +1,12 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-server'
-import type {
-  ProductionStep, Prioridad, EtapaOrden, EtapaPieza, EtapaPasarela,
-} from '@/lib/production-v2'
 
 // =====================================================================
-// Server Actions — Módulo de Producción rediseñado.
-// Todas las mutaciones van por Supabase RPC (SECURITY DEFINER).
-// Los precios NUNCA vienen del cliente: los calcula la RPC desde el
-// catálogo (production_price_catalog).
+// Server Actions — Producción v3 (flujo de tickets por pieza).
+// Inserts/updates directos sobre production_tickets, sin RPC: no hay
+// precios que calcular ni etapas que validar en el servidor.
 // =====================================================================
-
-export interface PieceInput {
-  piece_name: string
-  quantity: number
-}
 
 export interface ActionResult<T = unknown> {
   ok: boolean
@@ -23,326 +14,46 @@ export interface ActionResult<T = unknown> {
   error?: string
 }
 
-// ── Crear ticket de producción desde una orden de Alegra ──
-export async function createProductionTicket (input: {
-  alegra_id: string | null
+export interface PiezaAsignada {
+  pieza: string
+  responsable: string
+}
+
+// ── Abrir ticket: inserta una fila por pieza seleccionada ──
+export async function abrirTicketsProduccion (input: {
+  numero_orden: string | null
   factura: string
-  orden: string | null
-  cliente: string | null
-  vehiculo: string | null
-  pieces: PieceInput[]
-  created_by?: string
-  tipo_trabajo?: 'Fabricacion' | 'Reparacion' | 'Modificacion'
-  grado_reparacion?: 'Grado A' | 'Grado B' | 'Grado C' | null
-}): Promise<ActionResult<string>> {
-  if (!input.pieces.length) return { ok: false, error: 'Selecciona al menos una pieza' }
-  const { data, error } = await supabaseAdmin.rpc('create_production_ticket', {
-    p_alegra_id: input.alegra_id,
-    p_factura: input.factura,
-    p_orden: input.orden,
-    p_cliente: input.cliente,
-    p_vehiculo: input.vehiculo,
-    p_pieces: input.pieces,
-    p_created_by: input.created_by ?? null,
-    p_tipo_trabajo: input.tipo_trabajo ?? 'Fabricacion',
-    p_grado_reparacion: input.grado_reparacion ?? null,
-    p_re_trabajo: input.tipo_trabajo === 'Reparacion' ? 'Si' : 'No',
-  })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, data: data as string }
-}
+  alegra_id: string
+  piezas: PiezaAsignada[]
+  user_id: string
+  user_name: string
+}): Promise<ActionResult<null>> {
+  if (!input.piezas.length) return { ok: false, error: 'Selecciona al menos una pieza' }
+  const sinResponsable = input.piezas.find(p => !p.responsable.trim())
+  if (sinResponsable) return { ok: false, error: `Falta el responsable de "${sinResponsable.pieza}"` }
 
-// ── Confirmar una etapa de una pieza ──
-export async function confirmStep (input: {
-  ticket_id: string
-  piece_name: string
-  step: ProductionStep
-  employee_id: string
-  employee_name: string
-  is_self_bent?: boolean | null
-  doblador_id?: string | null
-  doblador_name?: string | null
-}): Promise<ActionResult<{ id: string; price: number; step: string; piece_name: string }>> {
-  const { data, error } = await supabaseAdmin.rpc('confirm_production_step', {
-    p_ticket_id: input.ticket_id,
-    p_piece_name: input.piece_name,
-    p_step: input.step,
-    p_employee_id: input.employee_id,
-    p_employee_name: input.employee_name,
-    p_is_self_bent: input.is_self_bent ?? null,
-    p_doblador_id: input.doblador_id ?? null,
-    p_doblador_name: input.doblador_name ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  const row = (Array.isArray(data) ? data[0] : data) as { id: string; price: number; step: string; piece_name: string }
-  return { ok: true, data: row }
-}
+  const rows = input.piezas.map(p => ({
+    numero_orden: input.numero_orden,
+    factura: input.factura,
+    alegra_id: input.alegra_id,
+    pieza: p.pieza,
+    responsable: p.responsable.trim(),
+    estado: 'pendiente' as const,
+    user_id: input.user_id,
+    user_name: input.user_name,
+  }))
 
-// ── Cerrar ticket ──
-export async function closeTicket (ticketId: string): Promise<ActionResult<{ id: string; total_cost: number; status: string }>> {
-  const { data, error } = await supabaseAdmin.rpc('close_production_ticket', {
-    p_ticket_id: ticketId,
-  })
-  if (error) return { ok: false, error: error.message }
-  const row = (Array.isArray(data) ? data[0] : data) as { id: string; total_cost: number; status: string }
-  return { ok: true, data: row }
-}
-
-// ── Generar nómina ──
-export async function createPayrollRun (input: {
-  period_type: 'semanal' | 'quincenal' | 'mensual'
-  period_start: string
-  period_end: string
-  employee_ids: string[]
-  created_by?: string
-}): Promise<ActionResult<{ run_id: string; total_amount: number; details_count: number }>> {
-  if (!input.employee_ids.length) return { ok: false, error: 'Selecciona al menos un empleado' }
-  const { data, error } = await supabaseAdmin.rpc('create_payroll_run', {
-    p_period_type: input.period_type,
-    p_period_start: input.period_start,
-    p_period_end: input.period_end,
-    p_employee_ids: input.employee_ids,
-    p_created_by: input.created_by ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  const row = (Array.isArray(data) ? data[0] : data) as { run_id: string; total_amount: number; details_count: number }
-  return { ok: true, data: row }
-}
-
-// ── Marcar nómina como pagada ──
-export async function markPayrollPaid (runId: string): Promise<ActionResult<null>> {
-  const { error } = await supabaseAdmin
-    .from('production_payroll_runs')
-    .update({ status: 'pagada' })
-    .eq('id', runId)
+  const { error } = await supabaseAdmin.from('production_tickets').insert(rows)
   if (error) return { ok: false, error: error.message }
   return { ok: true, data: null }
 }
 
-// ── Gestión de empleados ──
-export async function addEmployee (name: string): Promise<ActionResult<{ id: string }>> {
-  const clean = name.trim()
-  if (!clean) return { ok: false, error: 'Nombre vacío' }
-  const { data, error } = await supabaseAdmin
-    .from('production_employees')
-    .insert({ name: clean, active: true })
-    .select('id')
-    .single()
-  if (error) {
-    if (error.code === '23505') return { ok: false, error: 'Ya existe un empleado con ese nombre' }
-    return { ok: false, error: error.message }
-  }
-  return { ok: true, data: { id: data.id } }
-}
-
-export async function toggleEmployeeActive (id: string, active: boolean): Promise<ActionResult<null>> {
+// ── Marcar una pieza como completada ──
+export async function completarTicketProduccion (id: string): Promise<ActionResult<null>> {
   const { error } = await supabaseAdmin
-    .from('production_employees')
-    .update({ active })
+    .from('production_tickets')
+    .update({ estado: 'completado', completado_en: new Date().toISOString() })
     .eq('id', id)
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, data: null }
-}
-
-// ── Importar catálogo desde el cliente (opcional) ──
-export async function importCatalog (rows: Array<Record<string, unknown>>): Promise<ActionResult<{ inserted: number; updated: number }>> {
-  const { data, error } = await supabaseAdmin.rpc('import_price_catalog', { p_rows: rows })
-  if (error) return { ok: false, error: error.message }
-  const row = (Array.isArray(data) ? data[0] : data) as { inserted: number; updated: number }
-  return { ok: true, data: row }
-}
-
-// =====================================================================
-// Pasarela secuencial — Corte → Doblado → Armado → Soldadura
-//
-// El orden y el bloqueo entre etapas los impone la base de datos
-// (las RPC rechazan escribir en una etapa que no es la actual), así que
-// el cliente nunca puede saltarse una etapa manipulando la petición.
-// =====================================================================
-
-// ── Corte / Doblado: una sola persona para toda la orden ──
-export async function setOrderStage (input: {
-  ticket_id: string
-  etapa: EtapaOrden
-  hecho: boolean
-  motivo?: string | null
-  persona?: string | null
-}): Promise<ActionResult<{ etapa_actual: string }>> {
-  if (input.hecho && !input.persona?.trim()) {
-    return { ok: false, error: 'Debe seleccionar quién lo hizo' }
-  }
-  if (!input.hecho && !input.motivo?.trim()) {
-    return { ok: false, error: 'Debe indicar el motivo' }
-  }
-  const { data, error } = await supabaseAdmin.rpc('pasarela_set_order_stage', {
-    p_ticket_id: input.ticket_id,
-    p_etapa: input.etapa,
-    p_hecho: input.hecho,
-    p_motivo: input.motivo ?? null,
-    p_persona: input.persona ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  const row = (Array.isArray(data) ? data[0] : data) as { etapa_actual: string }
-  return { ok: true, data: row }
-}
-
-// ── Armado / Soldadura: una persona por pieza ──
-export async function setPieceStage (input: {
-  pieza_id: string
-  etapa: EtapaPieza
-  hecho: boolean
-  motivo?: string | null
-  persona?: string | null
-}): Promise<ActionResult<{ ticket_id: string; etapa_actual: string; status: string }>> {
-  if (input.hecho && !input.persona?.trim()) {
-    return { ok: false, error: 'Debe seleccionar quién lo hizo' }
-  }
-  if (!input.hecho && !input.motivo?.trim()) {
-    return { ok: false, error: 'Debe indicar el motivo' }
-  }
-  const { data, error } = await supabaseAdmin.rpc('pasarela_set_piece_stage', {
-    p_pieza_id: input.pieza_id,
-    p_etapa: input.etapa,
-    p_hecho: input.hecho,
-    p_motivo: input.motivo ?? null,
-    p_persona: input.persona ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  const row = (Array.isArray(data) ? data[0] : data) as { ticket_id: string; etapa_actual: string; status: string }
-  return { ok: true, data: row }
-}
-
-// ── Personal de cada área de la pasarela ──
-export async function addPersonalPasarela (input: {
-  etapa: EtapaPasarela
-  nombre: string
-}): Promise<ActionResult<{ id: string }>> {
-  const clean = input.nombre.trim()
-  if (!clean) return { ok: false, error: 'Escriba el nombre de la persona' }
-  const { data, error } = await supabaseAdmin
-    .from('personal_pasarela')
-    .insert({ etapa: input.etapa, nombre: clean, activo: true })
-    .select('id')
-    .single()
-  if (error) {
-    if (error.code === '23505') return { ok: false, error: 'Ya existe esa persona en esta área' }
-    return { ok: false, error: error.message }
-  }
-  return { ok: true, data: { id: data.id } }
-}
-
-export async function togglePersonalPasarela (id: string, activo: boolean): Promise<ActionResult<null>> {
-  const { error } = await supabaseAdmin
-    .from('personal_pasarela')
-    .update({ activo })
-    .eq('id', id)
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, data: null }
-}
-
-export async function deletePersonalPasarela (id: string): Promise<ActionResult<null>> {
-  const { error } = await supabaseAdmin
-    .from('personal_pasarela')
-    .delete()
-    .eq('id', id)
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, data: null }
-}
-
-// =====================================================================
-// Planificador de Producción
-// =====================================================================
-
-// ── Capacidad diaria de un área ──
-export async function setAreaCapacity (input: {
-  step: ProductionStep
-  daily_capacity: number
-  updated_by?: string
-}): Promise<ActionResult<null>> {
-  if (input.daily_capacity <= 0) return { ok: false, error: 'La capacidad debe ser mayor a 0' }
-  const { error } = await supabaseAdmin.rpc('set_area_capacity', {
-    p_step: input.step,
-    p_daily_capacity: input.daily_capacity,
-    p_updated_by: input.updated_by ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, data: null }
-}
-
-// ── Capacidad diaria de un empleado por etapa ──
-export async function setEmployeeCapacity (input: {
-  employee_id: string
-  step: ProductionStep
-  daily_capacity: number
-  updated_by?: string
-}): Promise<ActionResult<null>> {
-  if (input.daily_capacity < 0) return { ok: false, error: 'La capacidad no puede ser negativa' }
-  const { error } = await supabaseAdmin.rpc('set_employee_capacity', {
-    p_employee_id: input.employee_id,
-    p_step: input.step,
-    p_daily_capacity: input.daily_capacity,
-    p_updated_by: input.updated_by ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, data: null }
-}
-
-// ── Programar fecha de un ticket (al crear) ──
-export async function setTicketSchedule (input: {
-  ticket_id: string
-  fecha_programada: string
-  fabricador_id?: string | null
-  fabricador_name?: string | null
-  prioridad?: Prioridad
-  changed_by?: string
-  reason?: string
-}): Promise<ActionResult<null>> {
-  const { error } = await supabaseAdmin.rpc('set_ticket_schedule', {
-    p_ticket_id: input.ticket_id,
-    p_fecha_programada: input.fecha_programada,
-    p_fabricador_id: input.fabricador_id ?? null,
-    p_fabricador_name: input.fabricador_name ?? null,
-    p_prioridad: input.prioridad ?? 'normal',
-    p_changed_by: input.changed_by ?? null,
-    p_reason: input.reason ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, data: null }
-}
-
-// ── Mover ticket (drag & drop) ──
-export async function moveTicketSchedule (input: {
-  ticket_id: string
-  new_fecha: string
-  new_fabricador_id?: string | null
-  new_fabricador_name?: string | null
-  changed_by?: string
-  reason?: string
-}): Promise<ActionResult<{ old_fecha: string; new_fecha: string; fabricador_name: string }>> {
-  const { data, error } = await supabaseAdmin.rpc('move_ticket_schedule', {
-    p_ticket_id: input.ticket_id,
-    p_new_fecha: input.new_fecha,
-    p_new_fabricador_id: input.new_fabricador_id ?? null,
-    p_new_fabricador_name: input.new_fabricador_name ?? null,
-    p_changed_by: input.changed_by ?? null,
-    p_reason: input.reason ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  const row = (Array.isArray(data) ? data[0] : data) as { old_fecha: string; new_fecha: string; fabricador_name: string }
-  return { ok: true, data: row }
-}
-
-// ── Reasignar empleado de una etapa confirmada ──
-export async function assignStepEmployee (input: {
-  step_id: string
-  employee_id: string
-  employee_name: string
-}): Promise<ActionResult<null>> {
-  const { error } = await supabaseAdmin.rpc('assign_step_employee', {
-    p_step_id: input.step_id,
-    p_employee_id: input.employee_id,
-    p_employee_name: input.employee_name,
-  })
   if (error) return { ok: false, error: error.message }
   return { ok: true, data: null }
 }

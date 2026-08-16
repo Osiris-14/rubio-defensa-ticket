@@ -1,15 +1,7 @@
 'use client'
-import { ArrowLeftRight, Gauge, Wallet, Download, RefreshCw, type LucideIcon } from 'lucide-react'
+import { Download, RefreshCw } from 'lucide-react'
 
-export type DashboardView = 'dashboard' | 'form' | 'tickets' | 'produccion' | 'pagos' | 'calendario' | 'capacidad' | 'movimientos'
-
-interface Action {
-  id: string
-  label: string
-  icon: LucideIcon
-  tone: 'red' | 'blue' | 'amber' | 'green' | 'gray'
-  onClick: () => void
-}
+export type DashboardView = 'dashboard' | 'form' | 'tickets' | 'produccion'
 
 interface Props {
   onNavigate: (view: DashboardView) => void
@@ -19,55 +11,10 @@ interface Props {
   canExport?: boolean
 }
 
-const toneStyles: Record<Action['tone'], { bg: string; color: string; border: string }> = {
-  red:   { bg: 'var(--red-50)',   color: 'var(--red)',   border: 'var(--red-ring)' },
-  blue:  { bg: 'var(--blue-bg)',  color: 'var(--blue)',  border: 'var(--blue-ring)' },
-  amber: { bg: 'var(--amber-bg)', color: 'var(--amber)', border: 'var(--amber-ring)' },
-  green: { bg: 'var(--green-bg)', color: 'var(--green)', border: 'var(--green-ring)' },
-  gray:  { bg: 'var(--gray-50)',  color: 'var(--gray-700)', border: 'var(--border)' },
-}
-
-export default function QuickActions ({ onNavigate, onRefresh, onExport, lastUpdated, canExport = true }: Props) {
-  const actions: Action[] = [
-    { id: 'mov',      label: 'Movimientos',   icon: ArrowLeftRight, tone: 'blue',  onClick: () => onNavigate('movimientos') },
-    { id: 'cap',      label: 'Capacidad',     icon: Gauge,         tone: 'amber', onClick: () => onNavigate('capacidad') },
-    { id: 'pay',      label: 'Pagos',         icon: Wallet,        tone: 'green', onClick: () => onNavigate('pagos') },
-  ]
-
+export default function QuickActions ({ onRefresh, onExport, lastUpdated, canExport = true }: Props) {
   return (
     <div className='card' style={{ padding: 18, marginBottom: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 4 }}>
-            Acceso rápido
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {actions.map(a => {
-              const t = toneStyles[a.tone]
-              const Icon = a.icon
-              return (
-                <button
-                  key={a.id}
-                  onClick={a.onClick}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 7,
-                    padding: '8px 14px', borderRadius: 'var(--radius)',
-                    background: t.bg, color: t.color,
-                    border: `1px solid ${t.border}`,
-                    fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.06)' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
-                >
-                  <Icon size={13} strokeWidth={2} />
-                  {a.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {lastUpdated && (
             <span style={{ fontSize: 11, color: 'var(--gray-500)' }}>
