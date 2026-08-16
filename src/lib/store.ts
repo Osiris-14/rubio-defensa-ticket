@@ -15,7 +15,7 @@ export interface AppUser {
 
 export const DEMO_USERS: AppUser[] = [
   { id: '1', username: 'recepcion', name: 'Carlos Martínez', role: 'recepcion', password: '1234' },
-  { id: '2', username: 'produccion', name: 'Luis García', role: 'produccion', password: '1234' },
+  { id: '2', username: 'produccion', name: 'Genesis Isla Metal', role: 'produccion', password: '1234' },
   { id: '3', username: 'pintura', name: 'Pedro Rodríguez', role: 'pintura', password: '1234' },
   { id: '4', username: 'instalacion', name: 'Juan Torres', role: 'instalacion', password: '1234' },
   { id: '5', username: 'marquilla', name: 'Ana López', role: 'marquilla', password: '1234' },

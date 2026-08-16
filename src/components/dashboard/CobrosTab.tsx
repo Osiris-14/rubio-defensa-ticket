@@ -1,79 +1,80 @@
 'use client'
 // ─────────────────────────────────────────────────────────
-// Dashboard · hoja "Cobros por puesto"
-// Lo devengado por cada puesto en la semana o el mes, calculado sobre
-// las piezas del calendario que tienen precio en el tarifario.
+// Dashboard · hoja "Cobros por responsable"
+// Lo devengado por cada responsable en la semana/mes/rango, calculado
+// sobre las piezas COMPLETADAS de production_tickets que tienen precio
+// en el tarifario.
 // ─────────────────────────────────────────────────────────
 import { useMemo, useState } from 'react'
-import { Inbox, AlertTriangle } from 'lucide-react'
+import { Wallet, AlertTriangle } from 'lucide-react'
 import {
-  cobrosPorPuesto, rangoSemana, rangoMes,
+  cobrosPorResponsable, hayCobrosRegistrados, rangoSemana, rangoMes, iso,
   type OrdenPresupuesto,
 } from '@/lib/presupuesto'
-import { COLOR_ETAPA, inicialesPuesto } from '@/lib/puestos'
 import { formatoMoneda } from '@/lib/tarifario'
-import { type PuestoCapacidad } from '@/lib/production-v2'
-
-type Periodo = 'semana' | 'mes'
+import DateRangeFilter, { type PeriodoFiltro } from './DateRangeFilter'
 
 interface Props {
   presupuestos: Map<string, OrdenPresupuesto>
-  puestos: PuestoCapacidad[]
   loading: boolean
 }
 
-export default function CobrosTab ({ presupuestos, puestos, loading }: Props) {
-  const [periodo, setPeriodo] = useState<Periodo>('semana')
+export default function CobrosTab ({ presupuestos, loading }: Props) {
+  const hoy = useMemo(() => new Date(), [])
+  const [periodo, setPeriodo] = useState<PeriodoFiltro>('semana')
+  const [desde, setDesde] = useState(() => iso(hoy))
+  const [hasta, setHasta] = useState(() => iso(hoy))
 
   const rango = useMemo(() => {
-    const hoy = new Date()
-    return periodo === 'semana' ? rangoSemana(hoy) : rangoMes(hoy)
-  }, [periodo])
+    return periodo === 'semana' ? rangoSemana(hoy) : periodo === 'mes' ? rangoMes(hoy) : { desde, hasta }
+  }, [periodo, hoy, desde, hasta])
 
-  // Solo puestos activos, según puesto_capacidad.
-  const activos = useMemo(() => {
-    const set = new Set(puestos.filter(p => p.activo).map(p => p.puesto))
-    return set
-  }, [puestos])
-
-  const filas = useMemo(() => {
-    const todos = cobrosPorPuesto(presupuestos, rango.desde, rango.hasta)
-    // Si puesto_capacidad aún no tiene filas, no se oculta nada.
-    if (activos.size === 0) return todos
-    return todos.filter(c => activos.has(c.puesto))
-  }, [presupuestos, rango, activos])
+  const filas = useMemo(() => cobrosPorResponsable(presupuestos, rango.desde, rango.hasta), [presupuestos, rango])
 
   const total = filas.reduce((a, f) => a + f.monto, 0)
   const totalSinPrecio = filas.reduce((a, f) => a + f.sinPrecio, 0)
-  const etiquetaPeriodo = periodo === 'semana' ? 'Esta semana' : 'Este mes'
 
   if (loading) {
     return <div style={{ padding: '56px', textAlign: 'center', color: '#999', fontSize: 13 }}>Cargando cobros…</div>
   }
 
+  if (!hayCobrosRegistrados(presupuestos)) {
+    return (
+      <div style={{
+        background: '#fff', border: '0.5px solid #ECECEC', borderRadius: 12,
+        padding: '64px 24px', textAlign: 'center',
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: 14, background: '#F7F7F7',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+        }}>
+          <Wallet size={22} strokeWidth={1.6} style={{ color: '#BBB' }} />
+        </div>
+        <div style={{ fontSize: 14.5, color: '#1A1A1A', fontWeight: 600, marginBottom: 6 }}>
+          No hay cobros registrados aún
+        </div>
+        <div style={{ fontSize: 13, color: '#999', maxWidth: 380, margin: '0 auto', lineHeight: 1.5 }}>
+          Los cobros aparecerán aquí cuando se marquen piezas como completadas.
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
-      {/* Selector de período */}
+      {/* Filtro de fecha */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{
-          marginLeft: 'auto', padding: '4px 5px', display: 'flex', gap: 2,
-          background: '#fff', border: '0.5px solid #ECECEC', borderRadius: 8,
-        }}>
-          {(['semana', 'mes'] as Periodo[]).map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriodo(p)}
-              style={{
-                padding: '5px 12px', borderRadius: 6, border: 'none',
-                background: periodo === p ? 'var(--red)' : 'transparent',
-                color: periodo === p ? '#fff' : '#666',
-                fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-              }}
-            >
-              {p === 'semana' ? 'Esta semana' : 'Este mes'}
-            </button>
-          ))}
-        </div>
+        <DateRangeFilter
+          periodo={periodo}
+          onPeriodo={p => {
+            setPeriodo(p)
+            if (p === 'rango') { setDesde(iso(hoy)); setHasta(iso(hoy)) }
+          }}
+          desde={desde}
+          hasta={hasta}
+          onDesde={setDesde}
+          onHasta={setHasta}
+        />
       </div>
 
       {/* Total nómina */}
@@ -84,10 +85,10 @@ export default function CobrosTab ({ presupuestos, puestos, loading }: Props) {
       }}>
         <div>
           <div style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-            Total nómina producción
+            Total producción
           </div>
           <div style={{ fontSize: 12, color: '#666', marginTop: 3 }}>
-            {etiquetaPeriodo} · {rango.desde} → {rango.hasta}
+            {rango.desde} → {rango.hasta}
           </div>
         </div>
         <div style={{ fontSize: 26, fontWeight: 700, color: '#1A1A1A', letterSpacing: '-0.02em' }}>
@@ -100,70 +101,58 @@ export default function CobrosTab ({ presupuestos, puestos, loading }: Props) {
           background: '#fff', border: '0.5px solid #ECECEC', borderRadius: 12,
           padding: '56px 24px', textAlign: 'center',
         }}>
-          <div style={{
-            width: 46, height: 46, borderRadius: 12, background: '#F7F7F7',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-          }}>
-            <Inbox size={20} strokeWidth={1.6} style={{ color: '#BBB' }} />
-          </div>
           <div style={{ fontSize: 13.5, color: '#666', fontWeight: 500 }}>
-            No hay piezas agendadas en este período
+            No hay cobros en este período
           </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {filas.map(f => {
-            const c = COLOR_ETAPA[f.etapa]
-            return (
-              <div
-                key={f.puesto}
-                style={{
-                  background: '#fff', border: '0.5px solid #ECECEC', borderRadius: 10,
-                  padding: '12px 16px',
-                  display: 'flex', alignItems: 'center', gap: 12,
-                }}
-              >
-                {/* Avatar */}
+          {filas.map(f => (
+            <div
+              key={f.responsable}
+              style={{
+                background: '#fff', border: '0.5px solid #ECECEC', borderRadius: 10,
+                padding: '12px 16px',
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}
+            >
+              {/* Avatar */}
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--red-50)', color: 'var(--red)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12.5, fontWeight: 700,
+              }}>
+                {iniciales(f.responsable)}
+              </div>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                  width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                  background: c.bg, color: c.text,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12.5, fontWeight: 700,
+                  fontSize: 14, fontWeight: 500, color: '#1A1A1A',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>
-                  {inicialesPuesto(f.puesto)}
+                  {f.responsable}
                 </div>
-
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 14, fontWeight: 500, color: '#1A1A1A',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {f.label}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                    {f.ordenes} {f.ordenes === 1 ? 'orden' : 'órdenes'} · {f.piezas} {f.piezas === 1 ? 'pieza' : 'piezas'}
-                    {f.sinPrecio > 0 && (
-                      <span style={{ color: '#B8860B' }}> · {f.sinPrecio} sin precio</span>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{
-                    fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em',
-                    color: f.monto === 0 && f.sinPrecio > 0 ? '#BBB' : '#1A1A1A',
-                  }}>
-                    {/* Sin ninguna pieza con precio no se muestra RD$ 0:
-                        no ganó cero, es que no hay tarifa que aplicar. */}
-                    {f.monto === 0 && f.sinPrecio > 0 ? '— sin precio' : formatoMoneda(f.monto)}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
-                    {etiquetaPeriodo.toLowerCase()}
-                  </div>
+                <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                  {f.ordenes} {f.ordenes === 1 ? 'orden' : 'órdenes'} · {f.piezas} {f.piezas === 1 ? 'pieza' : 'piezas'}
+                  {f.sinPrecio > 0 && (
+                    <span style={{ color: '#B8860B' }}> · {f.sinPrecio} sin precio</span>
+                  )}
                 </div>
               </div>
-            )
-          })}
+
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{
+                  fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em',
+                  color: f.monto === 0 && f.sinPrecio > 0 ? '#BBB' : '#1A1A1A',
+                }}>
+                  {/* Sin ninguna pieza con precio no se muestra RD$ 0:
+                      no ganó cero, es que no hay tarifa que aplicar. */}
+                  {f.monto === 0 && f.sinPrecio > 0 ? '— sin precio' : formatoMoneda(f.monto)}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -173,10 +162,17 @@ export default function CobrosTab ({ presupuestos, puestos, loading }: Props) {
       }}>
         {totalSinPrecio > 0 && <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} />}
         <span>
-          Montos calculados sobre las piezas con precio en el tarifario.
+          Montos calculados sobre las piezas completadas con precio en el tarifario.
           {totalSinPrecio > 0 && ` ${totalSinPrecio} ${totalSinPrecio === 1 ? 'pieza queda' : 'piezas quedan'} fuera del cálculo en este período.`}
         </span>
       </div>
     </div>
   )
+}
+
+function iniciales (nombre: string): string {
+  const palabras = nombre.trim().split(/\s+/).filter(Boolean)
+  if (palabras.length === 0) return '—'
+  if (palabras.length === 1) return palabras[0].slice(0, 2).toUpperCase()
+  return `${palabras[0][0]}${palabras[1][0]}`.toUpperCase()
 }

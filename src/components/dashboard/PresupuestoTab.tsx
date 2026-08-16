@@ -1,15 +1,16 @@
 'use client'
 // ─────────────────────────────────────────────────────────
 // Dashboard · hoja "Presupuesto por orden"
-// Costo de producir (tarifario) vs facturado (Alegra) por orden.
-// Las piezas sin precio en el tarifario se muestran como "— sin precio";
-// nunca como RD$0.
+// Costo de producir (tarifario, sobre production_tickets) vs facturado
+// (Alegra) por orden. Las piezas sin precio en el tarifario se
+// muestran como "— sin precio"; nunca como RD$0.
 // ─────────────────────────────────────────────────────────
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Search, Inbox, AlertTriangle } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search, Inbox, AlertTriangle, PackageOpen } from 'lucide-react'
 import { type FacturaProduccion } from '@/lib/production-v2'
-import { type OrdenPresupuesto } from '@/lib/presupuesto'
-import { formatoMoneda, formatoNumero } from '@/lib/tarifario'
+import { type OrdenPresupuesto, presupuestosEnRango, rangoSemana, rangoMes, iso } from '@/lib/presupuesto'
+import { formatoMoneda } from '@/lib/tarifario'
+import DateRangeFilter, { type PeriodoFiltro } from './DateRangeFilter'
 
 type Filtro = 'todas' | 'pagadas' | 'pendientes'
 
@@ -27,19 +28,31 @@ export default function PresupuestoTab ({ presupuestos, facturas, loading }: Pro
   const [filtro, setFiltro] = useState<Filtro>('todas')
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
 
-  // Factura por número de orden (talonario).
-  const facturaPorOrden = useMemo(() => {
+  const hoy = useMemo(() => new Date(), [])
+  const [periodo, setPeriodo] = useState<PeriodoFiltro>('mes')
+  const [desde, setDesde] = useState(() => rangoMes(hoy).desde)
+  const [hasta, setHasta] = useState(() => rangoMes(hoy).hasta)
+
+  const rango = periodo === 'semana' ? rangoSemana(hoy) : periodo === 'mes' ? rangoMes(hoy) : { desde, hasta }
+
+  // Factura por alegra_id — llave robusta (talonario puede venir vacío).
+  const facturaPorAlegra = useMemo(() => {
     const m = new Map<string, FacturaProduccion>()
-    for (const f of facturas) if (f.talonario) m.set(f.talonario, f)
+    for (const f of facturas) m.set(f.alegra_id, f)
     return m
   }, [facturas])
 
+  const presupuestosFiltrados = useMemo(
+    () => presupuestosEnRango(presupuestos, rango.desde, rango.hasta),
+    [presupuestos, rango.desde, rango.hasta],
+  )
+
   const filas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
-    const out = [...presupuestos.values()].map(p => {
-      const factura = facturaPorOrden.get(p.orden) ?? null
+    const out = [...presupuestosFiltrados.entries()].map(([key, p]) => {
+      const factura = p.alegraId ? facturaPorAlegra.get(p.alegraId) ?? null : null
       const pagada = factura !== null && factura.saldo <= UMBRAL_SALDO
-      return { ...p, factura, pagada }
+      return { key, ...p, factura, pagada }
     })
     return out
       .filter(r => {
@@ -53,13 +66,13 @@ export default function PresupuestoTab ({ presupuestos, facturas, loading }: Pro
         return true
       })
       .sort((a, b) => b.orden.localeCompare(a.orden, 'es', { numeric: true }))
-  }, [presupuestos, facturaPorOrden, busqueda, filtro])
+  }, [presupuestosFiltrados, facturaPorAlegra, busqueda, filtro])
 
-  function toggle (orden: string) {
+  function toggle (key: string) {
     setAbiertas(prev => {
       const n = new Set(prev)
-      if (n.has(orden)) n.delete(orden)
-      else n.add(orden)
+      if (n.has(key)) n.delete(key)
+      else n.add(key)
       return n
     })
   }
@@ -68,8 +81,45 @@ export default function PresupuestoTab ({ presupuestos, facturas, loading }: Pro
     return <div style={{ padding: '56px', textAlign: 'center', color: '#999', fontSize: 13 }}>Cargando presupuestos…</div>
   }
 
+  if (presupuestos.size === 0) {
+    return (
+      <div style={{
+        background: '#fff', border: '0.5px solid #ECECEC', borderRadius: 12,
+        padding: '64px 24px', textAlign: 'center',
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: 14, background: '#F7F7F7',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+        }}>
+          <PackageOpen size={22} strokeWidth={1.6} style={{ color: '#BBB' }} />
+        </div>
+        <div style={{ fontSize: 14.5, color: '#1A1A1A', fontWeight: 600, marginBottom: 6 }}>
+          No hay órdenes registradas aún
+        </div>
+        <div style={{ fontSize: 13, color: '#999', maxWidth: 360, margin: '0 auto', lineHeight: 1.5 }}>
+          Las órdenes aparecerán aquí cuando se abran tickets desde el tab Órdenes.
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
+      {/* Filtro de fecha */}
+      <div style={{ marginBottom: 14 }}>
+        <DateRangeFilter
+          periodo={periodo}
+          onPeriodo={p => {
+            setPeriodo(p)
+            if (p === 'rango') { setDesde(iso(hoy)); setHasta(iso(hoy)) }
+          }}
+          desde={desde}
+          hasta={hasta}
+          onDesde={setDesde}
+          onHasta={setHasta}
+        />
+      </div>
+
       {/* Barra de búsqueda + filtro */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative' }}>
@@ -120,17 +170,17 @@ export default function PresupuestoTab ({ presupuestos, facturas, loading }: Pro
             <Inbox size={20} strokeWidth={1.6} style={{ color: '#BBB' }} />
           </div>
           <div style={{ fontSize: 13.5, color: '#666', fontWeight: 500 }}>
-            No hay órdenes que coincidan
+            No hay órdenes que coincidan en este período
           </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filas.map(r => (
             <OrdenCard
-              key={r.orden}
+              key={r.key}
               row={r}
-              abierta={abiertas.has(r.orden)}
-              onToggle={() => toggle(r.orden)}
+              abierta={abiertas.has(r.key)}
+              onToggle={() => toggle(r.key)}
             />
           ))}
         </div>
@@ -141,7 +191,7 @@ export default function PresupuestoTab ({ presupuestos, facturas, loading }: Pro
 
 // ─────────────────────────────────────────────────────────
 function OrdenCard ({ row, abierta, onToggle }: {
-  row: OrdenPresupuesto & { factura: FacturaProduccion | null; pagada: boolean }
+  row: OrdenPresupuesto & { key: string; factura: FacturaProduccion | null; pagada: boolean }
   abierta: boolean
   onToggle: () => void
 }) {
@@ -176,7 +226,7 @@ function OrdenCard ({ row, abierta, onToggle }: {
           fontSize: 14, fontWeight: 500, color: '#1A1A1A', minWidth: 0,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
-          {row.factura?.vehiculo ?? 'Sin vehículo'}
+          {row.factura?.cliente ?? 'Sin cliente'}
         </span>
 
         {row.factura && (
@@ -202,12 +252,12 @@ function OrdenCard ({ row, abierta, onToggle }: {
         <div style={{ padding: '0 16px 16px' }}>
           {/* Tabla de piezas */}
           <div style={{ overflowX: 'auto', border: '0.5px solid #ECECEC', borderRadius: 8 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
               <thead>
                 <tr>
                   <Th>Pieza</Th>
-                  <Th>Etapa · Quién</Th>
-                  <Th>Tarifa</Th>
+                  <Th>Responsable</Th>
+                  <Th>Estado</Th>
                   <Th align='right'>Monto</Th>
                 </tr>
               </thead>
@@ -218,17 +268,10 @@ function OrdenCard ({ row, abierta, onToggle }: {
                       {p.pieza}
                     </td>
                     <td style={{ ...td, fontSize: 12, color: '#666' }}>
-                      {p.etapaQuien}
+                      {p.responsable}
                     </td>
-                    <td style={{ ...td, fontSize: 12, color: '#666' }}>
-                      {p.tarifaNombre === null ? (
-                        <span style={{ color: '#BBB' }}>—</span>
-                      ) : (
-                        <>
-                          {p.modo === 'self_bent' ? 'Doblé yo' : 'Me lo doblaron'}
-                          {p.monto !== null && ` · ${formatoNumero(p.monto)}`}
-                        </>
-                      )}
+                    <td style={{ ...td, fontSize: 12, color: p.estado === 'completado' ? '#3B6D11' : '#B8860B' }}>
+                      {p.estado === 'completado' ? 'Completado' : 'Pendiente'}
                     </td>
                     <td style={{ ...td, textAlign: 'right', fontSize: 12.5, whiteSpace: 'nowrap' }}>
                       {p.monto === null
