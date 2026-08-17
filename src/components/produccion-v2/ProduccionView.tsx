@@ -2,11 +2,12 @@
 import { useState, useCallback } from 'react'
 import { ChevronRight, Search } from 'lucide-react'
 import OrdenesTab from './OrdenesTab'
-import TicketsPendientesTab from './TicketsPendientesTab'
-import TicketsCompletadosTab from './TicketsCompletadosTab'
+import CorteTab from './CorteTab'
+import FabricacionTab from './FabricacionTab'
+import EtapaPorOrdenTab from './EtapaPorOrdenTab'
 import OrdenesCompletadasTab from './OrdenesCompletadasTab'
 
-type Vista = 'ordenes' | 'pendientes' | 'completados' | 'ordenes-completadas'
+type Vista = 'ordenes' | 'corte' | 'fabricacion' | 'soldadura' | 'pulido' | 'completadas'
 
 interface Props {
   user: { id: string; name: string; role: string }
@@ -14,9 +15,11 @@ interface Props {
 
 const TABS: { id: Vista; label: string }[] = [
   { id: 'ordenes', label: 'Órdenes' },
-  { id: 'pendientes', label: 'Tickets Pendientes' },
-  { id: 'completados', label: 'Tickets Completados' },
-  { id: 'ordenes-completadas', label: 'Órdenes Completadas' },
+  { id: 'corte', label: 'Corte' },
+  { id: 'fabricacion', label: 'Fabricación' },
+  { id: 'soldadura', label: 'Soldadura' },
+  { id: 'pulido', label: 'Pulido' },
+  { id: 'completadas', label: 'Órdenes Completadas' },
 ]
 
 export default function ProduccionView ({ user }: Props) {
@@ -87,9 +90,23 @@ export default function ProduccionView ({ user }: Props) {
         {vista === 'ordenes' && (
           <OrdenesTab key={reloadKey} user={user} busqueda={busqueda} onChanged={reload} />
         )}
-        {vista === 'pendientes' && <TicketsPendientesTab />}
-        {vista === 'completados' && <TicketsCompletadosTab />}
-        {vista === 'ordenes-completadas' && <OrdenesCompletadasTab />}
+        {vista === 'corte' && <CorteTab user={user} />}
+        {vista === 'fabricacion' && <FabricacionTab />}
+        {vista === 'soldadura' && (
+          <EtapaPorOrdenTab
+            etapa='soldadura'
+            emptyTitle='No hay órdenes en Soldadura'
+            emptyDescription='Cuando todas las piezas de una orden terminen Fabricación, aparecerán aquí.'
+          />
+        )}
+        {vista === 'pulido' && (
+          <EtapaPorOrdenTab
+            etapa='pulido'
+            emptyTitle='No hay órdenes en Pulido'
+            emptyDescription='Cuando todas las piezas de una orden terminen Soldadura, aparecerán aquí.'
+          />
+        )}
+        {vista === 'completadas' && <OrdenesCompletadasTab />}
       </div>
     </div>
   )

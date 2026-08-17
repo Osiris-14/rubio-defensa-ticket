@@ -10,7 +10,7 @@ export interface PiezaPresupuesto {
   key: string
   pieza: string
   responsable: string
-  estado: 'pendiente' | 'completado'
+  estado: 'pendiente' | 'en_proceso' | 'completado'
   /** YYYY-MM-DD, de created_at — para el filtro de Presupuesto por orden. */
   fechaCreada: string
   /** YYYY-MM-DD, de completado_en — para el filtro de Cobros. null si aún no se completó. */
@@ -44,6 +44,7 @@ export function construirPresupuestos (
   const out = new Map<string, OrdenPresupuesto>()
 
   for (const t of tickets) {
+    if (!t.pieza) continue // filas de etapa 'corte' — son a nivel de orden, sin pieza
     const key = t.alegra_id ?? t.numero_orden ?? t.id
     const fila = catalogo.find(r => r.active && r.piece_name === t.pieza) ?? null
     const montoRaw = fila ? Number(fila.fabrication_price_self_bent ?? 0) : null

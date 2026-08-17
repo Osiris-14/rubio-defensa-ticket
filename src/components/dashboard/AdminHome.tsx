@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, type ReactNode } from 'react'
 import { AlertCircle, LayoutDashboard, Receipt, Wallet } from 'lucide-react'
 import { type AppUser, ticketsToCSV } from '@/lib/store'
 import {
-  fetchProductionTicketsV3, fetchFacturasProduccion, fetchPriceCatalog,
+  fetchAllProductionTickets, fetchFacturasProduccion, fetchPriceCatalog, piezasVigentes,
   type FacturaProduccion, type PriceCatalogRow, type ProductionTicketV3,
 } from '@/lib/production-v2'
 import { construirPresupuestos, type OrdenPresupuesto } from '@/lib/presupuesto'
@@ -36,7 +36,7 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
       setLoading(true)
       try {
         const [t, f, c] = await Promise.all([
-          fetchProductionTicketsV3(),
+          fetchAllProductionTickets(),
           fetchFacturasProduccion(),
           fetchPriceCatalog(),
         ])
@@ -74,8 +74,11 @@ export default function AdminHome ({ user, onNavigate, canExport = true }: Props
   }
 
   // ── Presupuesto/Cobros — SOLO sobre production_tickets × tarifario.
+  // piezasVigentes() se queda con la fila más reciente por pieza: cada
+  // pieza deja varias filas en su vida (una por etapa del pipeline),
+  // sin esto se contaría 2-3 veces.
   const presupuestos: Map<string, OrdenPresupuesto> = useMemo(
-    () => construirPresupuestos(tickets, catalogo),
+    () => construirPresupuestos(piezasVigentes(tickets), catalogo),
     [tickets, catalogo],
   )
 

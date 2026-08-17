@@ -3,17 +3,16 @@ import { useState, useEffect, useMemo, useTransition } from 'react'
 import { AlertCircle, Calendar, CheckCircle2, Loader2, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
-  fetchProductionTicketsV3,
-  fetchFacturasProduccion,
-  type ProductionTicketV3,
-  type FacturaProduccion,
+  fetchProductionTicketsPorEtapa, fetchOrdenInfoMap,
+  type ProductionTicketV3, type FacturaProduccion,
 } from '@/lib/production-v2'
-import { completarTicketProduccion } from '@/app/actions/production'
+import { completarPiezaPipeline } from '@/app/actions/production'
 import { friendlyError } from '@/lib/errorMessages'
+import { formatFecha } from './OrdenesTab'
 
-export default function TicketsPendientesTab () {
+export default function FabricacionTab () {
   const [tickets, setTickets] = useState<ProductionTicketV3[]>([])
-  const [facturas, setFacturas] = useState<FacturaProduccion[]>([])
+  const [ordenesInfo, setOrdenesInfo] = useState<Map<string, FacturaProduccion>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -22,13 +21,13 @@ export default function TicketsPendientesTab () {
     let active = true
     async function load () {
       try {
-        const [t, f] = await Promise.all([
-          fetchProductionTicketsV3('pendiente'),
-          fetchFacturasProduccion().catch(() => [] as FacturaProduccion[]),
+        const [t, ordenes] = await Promise.all([
+          fetchProductionTicketsPorEtapa('fabricacion'),
+          fetchOrdenInfoMap(),
         ])
         if (!active) return
         setTickets(t)
-        setFacturas(f)
+        setOrdenesInfo(ordenes)
         setError('')
       } catch (e) {
         if (active) setError(friendlyError(e))
@@ -40,21 +39,14 @@ export default function TicketsPendientesTab () {
     return () => { active = false }
   }, [reloadKey])
 
-  // Realtime: los tickets nuevos/completados se reflejan en vivo.
   useEffect(() => {
-    const channel = supabase.channel(`pendientes-v3-${Math.random().toString(36).slice(2)}`)
+    const channel = supabase.channel(`fabricacion-${Math.random().toString(36).slice(2)}`)
     channel.on('postgres_changes',
       { event: '*', schema: 'public', table: 'production_tickets' },
       () => setReloadKey(k => k + 1))
     channel.subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
-
-  const clientePorAlegra = useMemo(() => {
-    const map = new Map<string, FacturaProduccion>()
-    for (const f of facturas) map.set(f.alegra_id, f)
-    return map
-  }, [facturas])
 
   const grupos = useMemo(() => {
     const map = new Map<string, ProductionTicketV3[]>()
@@ -67,15 +59,15 @@ export default function TicketsPendientesTab () {
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'))
   }, [tickets])
 
-  function marcarCompletado (id: string) {
+  function marcarCompletada (id: string) {
     setTickets(prev => prev.filter(t => t.id !== id))
-    completarTicketProduccion(id).catch(e => {
+    completarPiezaPipeline(id).catch(e => {
       setError(friendlyError(e))
       setReloadKey(k => k + 1)
     })
   }
 
-  if (loading) return <LoadingState message='Cargando tickets pendientes…' />
+  if (loading) return <LoadingState message='Cargando Fabricación…' />
 
   if (error) {
     return (
@@ -92,8 +84,8 @@ export default function TicketsPendientesTab () {
   if (tickets.length === 0) {
     return (
       <EmptyState
-        title='No hay piezas pendientes'
-        description='Cuando abras un ticket desde una orden, las piezas aparecerán aquí agrupadas por responsable.'
+        title='No hay piezas en Fabricación'
+        description='Las piezas confirmadas desde Corte aparecerán aquí agrupadas por responsable.'
       />
     )
   }
@@ -114,7 +106,7 @@ export default function TicketsPendientesTab () {
               fontSize: 11.5, fontWeight: 700, color: 'var(--gray-500)',
               background: 'var(--gray-100)', padding: '2px 9px', borderRadius: 9999,
             }}>
-              {piezas.length}
+              {piezas.length} {piezas.length === 1 ? 'pieza pendiente' : 'piezas pendientes'}
             </span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
@@ -122,8 +114,8 @@ export default function TicketsPendientesTab () {
               <PiezaCard
                 key={t.id}
                 ticket={t}
-                cliente={t.alegra_id ? clientePorAlegra.get(t.alegra_id)?.cliente ?? null : null}
-                onCompletar={() => marcarCompletado(t.id)}
+                info={t.alegra_id ? ordenesInfo.get(t.alegra_id) ?? null : null}
+                onCompletar={() => marcarCompletada(t.id)}
               />
             ))}
           </div>
@@ -133,9 +125,9 @@ export default function TicketsPendientesTab () {
   )
 }
 
-function PiezaCard ({ ticket, cliente, onCompletar }: {
+function PiezaCard ({ ticket, info, onCompletar }: {
   ticket: ProductionTicketV3
-  cliente: string | null
+  info: FacturaProduccion | null
   onCompletar: () => void
 }) {
   const [pending, startTransition] = useTransition()
@@ -147,10 +139,17 @@ function PiezaCard ({ ticket, cliente, onCompletar }: {
         <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>{ticket.factura ?? ''}</span>
       </div>
       <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--red)' }}>{ticket.pieza}</div>
-      <div style={{ fontSize: 13, color: 'var(--gray-600)' }}>{cliente ?? 'Cliente —'}</div>
+      <div style={{ fontSize: 13, color: 'var(--gray-600)' }}>{info?.cliente ?? 'Cliente —'}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gray-500)' }}>
-        <Calendar size={12} /> {formatDate(ticket.created_at)}
+        <Calendar size={12} /> Fecha 0 {formatFecha(info?.fecha_vencimiento ?? null)}
       </div>
+      <span style={{
+        alignSelf: 'flex-start', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 9999,
+        background: ticket.doblo_david ? 'var(--blue-bg)' : 'var(--gray-100)',
+        color: ticket.doblo_david ? 'var(--blue)' : 'var(--gray-600)',
+      }}>
+        Dobló David: {ticket.doblo_david ? 'Sí' : 'No'}
+      </span>
       <button
         onClick={() => startTransition(onCompletar)}
         disabled={pending}
@@ -160,16 +159,10 @@ function PiezaCard ({ ticket, cliente, onCompletar }: {
           background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-ring)',
         }}
       >
-        <CheckCircle2 size={15} /> {pending ? 'Guardando…' : 'Marcar completado'}
+        <CheckCircle2 size={15} /> {pending ? 'Guardando…' : 'Marcar completada'}
       </button>
     </div>
   )
-}
-
-function formatDate (iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('es-DO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function LoadingState ({ message }: { message: string }) {

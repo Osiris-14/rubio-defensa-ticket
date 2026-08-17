@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { AlertCircle, PackageCheck } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
-  fetchOrdenesCompletadas,
+  fetchOrdenesCompletadasPipeline,
   fetchFacturasProduccion,
   type ProductionTicketV3,
   type FacturaProduccion,
@@ -23,7 +23,7 @@ export default function OrdenesCompletadasTab () {
     async function load () {
       try {
         const [o, f] = await Promise.all([
-          fetchOrdenesCompletadas(),
+          fetchOrdenesCompletadasPipeline(),
           fetchFacturasProduccion().catch(() => [] as FacturaProduccion[]),
         ])
         if (!active) return
@@ -124,6 +124,10 @@ function OrdenCompletadaCard ({ piezas, factura }: { piezas: ProductionTicketV3[
 
       <div style={{ fontSize: 13.5, color: 'var(--gray-700)', fontWeight: 500 }}>
         {factura?.cliente ?? 'Cliente —'}
+      </div>
+
+      <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>
+        ¿Dobló David? <strong style={{ color: 'var(--gray-800)' }}>{primero.doblo_david ? 'Sí' : 'No'}</strong>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>

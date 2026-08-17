@@ -1,24 +1,27 @@
 'use client'
 import { useState, useTransition } from 'react'
-import { X, Package, CheckCircle, AlertCircle } from 'lucide-react'
-import { PIEZAS_TARIFARIO, type OrdenParaTicket } from '@/lib/production-v2'
-import { abrirTicketsProduccion } from '@/app/actions/production'
+import { X, Package, CheckCircle, AlertCircle, Calendar } from 'lucide-react'
+import { PIEZAS_TARIFARIO, type ProductionTicketV3, type FacturaProduccion } from '@/lib/production-v2'
+import { abrirProduccion } from '@/app/actions/production'
 import { friendlyError } from '@/lib/errorMessages'
+import { formatFecha } from './OrdenesTab'
 
 interface Props {
-  orden: OrdenParaTicket
+  corteTicket: ProductionTicketV3
+  info: FacturaProduccion | null
   user: { id: string; name: string }
   onClose: () => void
   onSaved: () => void
 }
 
-export default function AbrirTicketModal ({ orden, user, onClose, onSaved }: Props) {
+export default function AbrirProduccionModal ({ corteTicket, info, user, onClose, onSaved }: Props) {
   const [responsables, setResponsables] = useState<Record<string, string>>({})
+  const [dobloDavid, setDobloDavid] = useState<boolean | null>(null)
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
-  const nombres = orden.productos.map(p => p.nombre).filter(Boolean) as string[]
+  const nombres = (info?.productos ?? []).map(p => p.nombre).filter(Boolean) as string[]
   const piezasSeleccionadas = Object.keys(responsables)
 
   function toggle (pieza: string) {
@@ -38,14 +41,17 @@ export default function AbrirTicketModal ({ orden, user, onClose, onSaved }: Pro
     if (piezasSeleccionadas.length === 0) { setError('Selecciona al menos una pieza'); return }
     const sinNombre = piezasSeleccionadas.find(p => !responsables[p].trim())
     if (sinNombre) { setError(`Falta el responsable de "${sinNombre}"`); return }
+    if (dobloDavid === null) { setError('Indica si la dobló David'); return }
 
     setError('')
     startTransition(async () => {
-      const res = await abrirTicketsProduccion({
-        numero_orden: orden.talonario,
-        factura: orden.factura,
-        alegra_id: orden.alegra_id,
+      const res = await abrirProduccion({
+        corte_ticket_id: corteTicket.id,
+        numero_orden: corteTicket.numero_orden,
+        factura: corteTicket.factura ?? '',
+        alegra_id: corteTicket.alegra_id ?? '',
         piezas: piezasSeleccionadas.map(pieza => ({ pieza, responsable: responsables[pieza] })),
+        doblo_david: dobloDavid,
         user_id: user.id,
         user_name: user.name,
       })
@@ -67,10 +73,10 @@ export default function AbrirTicketModal ({ orden, user, onClose, onSaved }: Pro
         }}>
           <div style={{ minWidth: 0 }}>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)', letterSpacing: '-0.02em', margin: 0 }}>
-              Abrir ticket
+              Abrir Producción
             </h2>
             <p style={{ fontSize: 13, color: 'var(--gray-500)', marginTop: 4 }}>
-              Orden #{orden.talonario || '—'} · Factura {orden.factura} · {orden.cliente ?? 'Cliente —'}
+              Orden #{corteTicket.numero_orden || '—'} · Factura {corteTicket.factura} · {info?.cliente ?? 'Cliente —'}
             </p>
           </div>
           <button
@@ -90,18 +96,26 @@ export default function AbrirTicketModal ({ orden, user, onClose, onSaved }: Pro
             }}>
               <CheckCircle size={32} />
             </div>
-            <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)', margin: 0 }}>¡Ticket abierto!</h3>
+            <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--gray-900)', margin: 0 }}>¡Producción abierta!</h3>
             <p style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 8 }}>
-              Las piezas ya están en <strong>Tickets Pendientes</strong>.
+              Las piezas ya están en <strong>Fabricación</strong>.
             </p>
           </div>
         ) : (
           <>
             <div style={{ padding: '18px 24px', flex: 1, overflowY: 'auto' }}>
-              {/* ── Sección A: productos de la orden (solo lectura) ── */}
+              {/* ── Sección A: solo lectura ── */}
               <div style={{ marginBottom: 22 }}>
                 <div className='eyebrow' style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Package size={13} /> Productos de la orden (Alegra)
+                  <Package size={13} /> Datos de la orden
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12.5, color: 'var(--gray-600)', marginBottom: 10, flexWrap: 'wrap' as const }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Calendar size={12} /> Apertura {formatFecha(info?.fecha ?? null)}
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Calendar size={12} /> Fecha 0 {formatFecha(info?.fecha_vencimiento ?? null)}
+                  </span>
                 </div>
                 {nombres.length === 0 ? (
                   <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>Sin productos en la factura.</div>
@@ -120,7 +134,7 @@ export default function AbrirTicketModal ({ orden, user, onClose, onSaved }: Pro
               </div>
 
               {/* ── Sección B: piezas a producir ── */}
-              <div>
+              <div style={{ marginBottom: 22 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--gray-900)', margin: '0 0 4px' }}>
                   Piezas a producir
                 </h3>
@@ -168,6 +182,34 @@ export default function AbrirTicketModal ({ orden, user, onClose, onSaved }: Pro
                   })}
                 </div>
               </div>
+
+              {/* ── Sección C: doblado ── */}
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--gray-900)', margin: '0 0 10px' }}>
+                  ¿La dobló David?
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[{ label: 'Sí', val: true }, { label: 'No', val: false }].map(opt => {
+                    const active = dobloDavid === opt.val
+                    return (
+                      <button
+                        key={opt.label}
+                        type='button'
+                        onClick={() => { setDobloDavid(opt.val); setError('') }}
+                        style={{
+                          padding: '14px 10px', fontSize: 15, fontWeight: 700,
+                          color: active ? '#fff' : 'var(--gray-800)',
+                          background: active ? 'var(--red)' : 'var(--bg-card)',
+                          border: `2px solid ${active ? 'var(--red)' : 'var(--border)'}`,
+                          borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* ── Footer ── */}
@@ -196,7 +238,7 @@ export default function AbrirTicketModal ({ orden, user, onClose, onSaved }: Pro
                   disabled={pending}
                   style={{ flex: 1, height: 50, fontSize: 15, fontWeight: 700 }}
                 >
-                  {pending ? 'Guardando…' : 'Confirmar y abrir ticket'}
+                  {pending ? 'Guardando…' : 'Confirmar y pasar a Fabricación'}
                 </button>
               </div>
             </div>

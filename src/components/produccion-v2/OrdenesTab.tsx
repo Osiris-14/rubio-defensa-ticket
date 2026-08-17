@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
-import { AlertCircle, Inbox } from 'lucide-react'
+import { useState, useEffect, useCallback, useTransition } from 'react'
+import { AlertCircle, Inbox, Calendar } from 'lucide-react'
 import { fetchOrdenesParaTicket, type OrdenParaTicket } from '@/lib/production-v2'
+import { enviarACorte } from '@/app/actions/production'
 import { formatoMoneda } from '@/lib/tarifario'
 import { friendlyError } from '@/lib/errorMessages'
-import AbrirTicketModal from './AbrirTicketModal'
 
 const UMBRAL_SALDO = 450
 
@@ -18,7 +18,6 @@ export default function OrdenesTab ({ user, busqueda, onChanged }: Props) {
   const [ordenes, setOrdenes] = useState<OrdenParaTicket[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [seleccionada, setSeleccionada] = useState<OrdenParaTicket | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
   const reload = useCallback(() => setReloadKey(k => k + 1), [])
@@ -49,6 +48,19 @@ export default function OrdenesTab ({ user, busqueda, onChanged }: Props) {
         (o.cliente ?? '').toLowerCase().includes(q),
       )
     : ordenes
+
+  async function handleEnviarACorte (orden: OrdenParaTicket) {
+    const res = await enviarACorte({
+      numero_orden: orden.talonario,
+      factura: orden.factura,
+      alegra_id: orden.alegra_id,
+      user_id: user.id,
+      user_name: user.name,
+    })
+    if (!res.ok) { setError(friendlyError(res.error)); return }
+    setOrdenes(prev => prev.filter(o => o.alegra_id !== orden.alegra_id))
+    onChanged()
+  }
 
   if (loading) {
     return (
@@ -94,24 +106,16 @@ export default function OrdenesTab ({ user, busqueda, onChanged }: Props) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {filtradas.map(o => (
-            <OrdenCard key={o.alegra_id} orden={o} onAbrir={() => setSeleccionada(o)} />
+            <OrdenCard key={o.alegra_id} orden={o} onEnviar={() => handleEnviarACorte(o)} />
           ))}
         </div>
-      )}
-
-      {seleccionada && (
-        <AbrirTicketModal
-          orden={seleccionada}
-          user={user}
-          onClose={() => setSeleccionada(null)}
-          onSaved={() => { setSeleccionada(null); reload(); onChanged() }}
-        />
       )}
     </>
   )
 }
 
-function OrdenCard ({ orden, onAbrir }: { orden: OrdenParaTicket; onAbrir: () => void }) {
+function OrdenCard ({ orden, onEnviar }: { orden: OrdenParaTicket; onEnviar: () => Promise<void> }) {
+  const [pending, startTransition] = useTransition()
   const pagada = orden.saldo <= UMBRAL_SALDO
   const nombres = orden.productos.map(p => p.nombre).filter(Boolean) as string[]
 
@@ -124,8 +128,17 @@ function OrdenCard ({ orden, onAbrir }: { orden: OrdenParaTicket; onAbrir: () =>
           </span>
           <span style={{ fontSize: 12.5, color: 'var(--gray-500)' }}>{orden.factura}</span>
         </div>
-        <div style={{ fontSize: 14, color: 'var(--gray-700)', fontWeight: 500, marginBottom: 12 }}>
+        <div style={{ fontSize: 14, color: 'var(--gray-700)', fontWeight: 500, marginBottom: 8 }}>
           {orden.cliente ?? 'Cliente —'}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--gray-500)', marginBottom: 12 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Calendar size={11} /> Apertura {formatFecha(orden.fecha)}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Calendar size={11} /> Fecha 0 {formatFecha(orden.fecha_vencimiento)}
+          </span>
         </div>
 
         {nombres.length > 0 && (
@@ -163,11 +176,12 @@ function OrdenCard ({ orden, onAbrir }: { orden: OrdenParaTicket; onAbrir: () =>
       </div>
 
       <button
-        onClick={onAbrir}
+        onClick={() => startTransition(onEnviar)}
+        disabled={pending}
         className='btn btn-primary'
         style={{ width: '100%', height: 48, fontSize: 14.5, fontWeight: 700, borderRadius: 0 }}
       >
-        Abrir ticket
+        {pending ? 'Enviando…' : 'Enviar a Corte'}
       </button>
     </div>
   )
@@ -184,4 +198,11 @@ function MoneyStat ({ label, value, color = 'var(--gray-900)' }: { label: string
       </div>
     </div>
   )
+}
+
+export function formatFecha (iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso.length <= 10 ? `${iso}T00:00:00` : iso)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('es-DO', { day: '2-digit', month: 'short' })
 }

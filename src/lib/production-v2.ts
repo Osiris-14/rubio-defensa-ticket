@@ -1,14 +1,17 @@
 // =====================================================================
 // Módulo de Producción — capa de lectura/escritura (cliente).
 //
-// v3: flujo de tickets por PIEZA impulsado por las facturas de Alegra.
-// Sin calendarios, sin pasarela Corte→Doblado→Armado→Soldadura, sin
-// precios. Un ticket = una pieza de una orden, con un responsable y un
-// estado pendiente/completado.
+// v4: pipeline de 5 etapas físicas impulsado por las facturas de
+// Alegra — Órdenes → Corte → Fabricación → Soldadura → Pulido →
+// Completada. Cada pieza deja rastro histórico: se inserta una fila
+// nueva por cada paso de Fabricación→Soldadura y Soldadura→Pulido; la
+// transición final Pulido→Completada es un UPDATE en la misma fila.
+// La fila de etapa 'corte' es a nivel de ORDEN (sin pieza).
 //
 // Se conservan las lecturas que siguen alimentando el Dashboard
-// "Resumen" (presupuesto/cobros por puesto, calculados sobre el
-// calendario de Google — sistema aparte que no se toca).
+// "Resumen" (presupuesto/cobros por responsable, calculados sobre
+// production_tickets × tarifario — ver piezasVigentes() más abajo para
+// cómo se evita contar la misma pieza varias veces).
 // =====================================================================
 import { supabase } from './supabase'
 
@@ -59,21 +62,30 @@ export const PIEZAS_TARIFARIO: string[] = [
   'Tubo Cabina',
   'Maletero',
   'Canasto NV350',
+  'Porta Pies',
+  'Protector de Batería',
 ]
 
 // ─────────────────────────────────────────────────────────
-// Tipos — tickets de producción (v3: una fila por pieza)
+// Tipos — tickets de producción (v4: pipeline por etapas)
 // ─────────────────────────────────────────────────────────
 
-export type EstadoTicket = 'pendiente' | 'completado'
+export type EstadoTicket = 'pendiente' | 'en_proceso' | 'completado'
+export type EtapaPipeline = 'corte' | 'fabricacion' | 'soldadura' | 'pulido' | 'completada'
+
+export const ETAPAS_PIPELINE: EtapaPipeline[] = ['corte', 'fabricacion', 'soldadura', 'pulido', 'completada']
 
 export interface ProductionTicketV3 {
   id: string
   numero_orden: string | null
   factura: string | null
   alegra_id: string | null
-  pieza: string
-  responsable: string
+  /** null en la fila de etapa 'corte' (es a nivel de orden, no de pieza). */
+  pieza: string | null
+  responsable: string | null
+  etapa: EtapaPipeline
+  /** null hasta que se confirma en Corte (se define una sola vez, para todas las piezas de esa confirmación). */
+  doblo_david: boolean | null
   estado: EstadoTicket
   completado_en: string | null
   user_id: string | null
@@ -81,7 +93,7 @@ export interface ProductionTicketV3 {
   created_at: string
 }
 
-const SELECT_TICKET_V3 = 'id, numero_orden, factura, alegra_id, pieza, responsable, estado, completado_en, user_id, user_name, created_at'
+const SELECT_TICKET_V3 = 'id, numero_orden, factura, alegra_id, pieza, responsable, etapa, doblo_david, estado, completado_en, user_id, user_name, created_at'
 
 // Producto de una factura de Alegra (columna jsonb `productos` de la vista silver).
 export interface ProductoFactura {
@@ -91,23 +103,9 @@ export interface ProductoFactura {
 }
 
 // Orden proveniente de Alegra (vista silver) aún sin ticket abierto.
-export interface OrdenParaTicket {
-  alegra_id: string
-  factura: string
-  cliente: string | null
-  talonario: string | null
-  fecha: string
-  total: number
-  total_pagado: number
-  saldo: number
-  productos: ProductoFactura[]
-}
-
-export interface ProductionKpisV3 {
-  ordenes_activas: number
-  tickets_pendientes: number
-  tickets_completados: number
-}
+// Mismo shape que FacturaProduccion (se define más abajo) — es la
+// misma vista, solo cambia el filtro con el que se consulta.
+export type OrdenParaTicket = FacturaProduccion
 
 // ─────────────────────────────────────────────────────────
 // Self-heal para la vista silver (el sync de Alegra puede borrarla)
@@ -169,96 +167,71 @@ function normalizeCatalogRow (r: Record<string, unknown>): PriceCatalogRow {
 const FECHA_DESDE_ORDENES = '2026-08-13'
 
 export async function fetchOrdenesParaTicket (): Promise<OrdenParaTicket[]> {
-  return withSelfHeal(async () => {
-    const { data: facturas, error } = await supabase
-      .schema('silver')
-      .from('v_facturas_produccion')
-      .select('alegra_id, factura, cliente, talonario, fecha, total, total_pagado, saldo, productos')
-      .gte('fecha', FECHA_DESDE_ORDENES)
-      .order('fecha', { ascending: false })
-    if (error) throw new Error(error.message)
-    const raw = (facturas ?? []) as Record<string, unknown>[]
+  const [facturas, existentes] = await Promise.all([
+    fetchFacturasProduccion(),
+    supabase.from('production_tickets').select('alegra_id'),
+  ])
+  if (existentes.error) throw new Error(existentes.error.message)
+  const conTicket = new Set((existentes.data ?? []).map(r => r.alegra_id).filter(Boolean) as string[])
 
-    const { data: existentes, error: existentesError } = await supabase
-      .from('production_tickets')
-      .select('alegra_id')
-    if (existentesError) throw new Error(existentesError.message)
-    const conTicket = new Set((existentes ?? []).map(r => r.alegra_id).filter(Boolean) as string[])
-
-    return raw
-      .filter(f => !conTicket.has(String(f.alegra_id)))
-      .map(normalizeOrdenParaTicket)
-  })
-}
-
-function normalizeOrdenParaTicket (r: Record<string, unknown>): OrdenParaTicket {
-  const productosRaw = Array.isArray(r.productos) ? r.productos as Record<string, unknown>[] : []
-  return {
-    alegra_id: String(r.alegra_id ?? ''),
-    factura: String(r.factura ?? ''),
-    cliente: (r.cliente as string | null) ?? null,
-    talonario: (r.talonario as string | null) ?? null,
-    fecha: String(r.fecha ?? ''),
-    total: Number(r.total ?? 0),
-    total_pagado: Number(r.total_pagado ?? 0),
-    saldo: Number(r.saldo ?? 0),
-    productos: productosRaw.map(p => ({
-      nombre: (p.nombre as string | null) ?? null,
-      descripcion: (p.descripcion as string | null) ?? null,
-      cantidad: p.cantidad != null ? Number(p.cantidad) : null,
-    })),
-  }
+  return facturas.filter(f => f.fecha >= FECHA_DESDE_ORDENES && !conTicket.has(f.alegra_id))
 }
 
 // ─────────────────────────────────────────────────────────
-// Lecturas — tickets de producción (v3, por pieza)
+// Lecturas — tickets de producción (v4, pipeline por etapas)
 // ─────────────────────────────────────────────────────────
 
-export async function fetchProductionTicketsV3 (estado?: EstadoTicket): Promise<ProductionTicketV3[]> {
-  let q = supabase.from('production_tickets').select(SELECT_TICKET_V3)
-  if (estado) q = q.eq('estado', estado)
+// Filas de una etapa del pipeline. soloActivas=true (default) excluye
+// las que ya se marcaron 'completado' en esa etapa (para que, p. ej.,
+// una orden ya confirmada en Corte no se quede pegada en el tab Corte).
+export async function fetchProductionTicketsPorEtapa (etapa: EtapaPipeline, soloActivas = true): Promise<ProductionTicketV3[]> {
+  let q = supabase.from('production_tickets').select(SELECT_TICKET_V3).eq('etapa', etapa)
+  if (soloActivas) q = q.neq('estado', 'completado')
   q = q.order('created_at', { ascending: false })
   const { data, error } = await q
   if (error) throw new Error(error.message)
   return (data ?? []) as unknown as ProductionTicketV3[]
 }
 
-// Todos los tickets agrupados por alegra_id — para detectar qué
-// órdenes están 100% completadas (tab "Órdenes Completadas").
-export async function fetchOrdenesCompletadas (): Promise<Map<string, ProductionTicketV3[]>> {
+// Todas las filas de production_tickets, sin filtrar — para
+// deduplicar con piezasVigentes() (Presupuesto/Cobros del Dashboard).
+export async function fetchAllProductionTickets (): Promise<ProductionTicketV3[]> {
   const { data, error } = await supabase
     .from('production_tickets')
     .select(SELECT_TICKET_V3)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
-  const rows = (data ?? []) as unknown as ProductionTicketV3[]
+  return (data ?? []) as unknown as ProductionTicketV3[]
+}
 
+// Órdenes cuyas piezas ya llegaron a 'completada' (tab "Órdenes Completadas").
+export async function fetchOrdenesCompletadasPipeline (): Promise<Map<string, ProductionTicketV3[]>> {
+  const rows = await fetchProductionTicketsPorEtapa('completada', false)
   const porOrden = new Map<string, ProductionTicketV3[]>()
   for (const t of rows) {
-    const key = t.alegra_id ?? t.id
+    const key = t.alegra_id ?? t.numero_orden ?? t.id
     const arr = porOrden.get(key) ?? []
     arr.push(t)
     porOrden.set(key, arr)
   }
-  for (const [key, piezas] of porOrden) {
-    if (!piezas.every(p => p.estado === 'completado')) porOrden.delete(key)
-  }
   return porOrden
 }
 
-export async function fetchProductionKpisV3 (): Promise<ProductionKpisV3> {
-  const { data, error } = await supabase
-    .from('production_tickets')
-    .select('numero_orden, alegra_id, estado')
-  if (error) throw new Error(error.message)
-  const rows = (data ?? []) as { numero_orden: string | null; alegra_id: string | null; estado: EstadoTicket }[]
-  const pendientes = rows.filter(r => r.estado === 'pendiente')
-  const ordenesActivas = new Set(pendientes.map(r => r.alegra_id ?? r.numero_orden))
-  return {
-    ordenes_activas: ordenesActivas.size,
-    tickets_pendientes: pendientes.length,
-    tickets_completados: rows.length - pendientes.length,
+// Una pieza física deja varias filas en su vida (una por etapa por la
+// que pasó — Fabricación, Soldadura, y la que termina en Pulido/
+// Completada). Para Presupuesto/Cobros del Dashboard, que cuentan cada
+// pieza UNA sola vez, esto se queda con la fila más reciente
+// (created_at) por (orden, pieza, responsable) y descarta las filas de
+// etapa 'corte' (son a nivel de orden, sin pieza).
+export function piezasVigentes (tickets: ProductionTicketV3[]): ProductionTicketV3[] {
+  const porPieza = new Map<string, ProductionTicketV3>()
+  for (const t of tickets) {
+    if (!t.pieza) continue
+    const key = `${t.alegra_id ?? t.numero_orden ?? t.id}${t.pieza}${t.responsable ?? ''}`
+    const actual = porPieza.get(key)
+    if (!actual || t.created_at > actual.created_at) porPieza.set(key, t)
   }
+  return [...porPieza.values()]
 }
 
 // ─────────────────────────────────────────────────────────
@@ -273,12 +246,15 @@ export interface FacturaProduccion {
   cliente: string | null
   vehiculo: string | null
   fecha: string
+  /** "Fecha 0" en la UI. */
+  fecha_vencimiento: string | null
   total: number
   total_pagado: number
   saldo: number
+  productos: ProductoFactura[]
 }
 
-const SELECT_FACTURA = 'alegra_id, factura, talonario, cliente, vehiculo, fecha, total, total_pagado, saldo'
+const SELECT_FACTURA = 'alegra_id, factura, talonario, cliente, vehiculo, fecha, fecha_vencimiento, total, total_pagado, saldo, productos'
 
 export async function fetchFacturasProduccion (): Promise<FacturaProduccion[]> {
   return withSelfHeal(async () => {
@@ -290,6 +266,7 @@ export async function fetchFacturasProduccion (): Promise<FacturaProduccion[]> {
     if (error) throw new Error(error.message)
     return (data ?? []).map(r => {
       const row = r as Record<string, unknown>
+      const productosRaw = Array.isArray(row.productos) ? row.productos as Record<string, unknown>[] : []
       return {
         alegra_id: String(row.alegra_id ?? ''),
         factura: String(row.factura ?? ''),
@@ -297,12 +274,26 @@ export async function fetchFacturasProduccion (): Promise<FacturaProduccion[]> {
         cliente: (row.cliente as string | null) ?? null,
         vehiculo: (row.vehiculo as string | null) ?? null,
         fecha: String(row.fecha ?? ''),
+        fecha_vencimiento: (row.fecha_vencimiento as string | null) ?? null,
+        productos: productosRaw.map(p => ({
+          nombre: (p.nombre as string | null) ?? null,
+          descripcion: (p.descripcion as string | null) ?? null,
+          cantidad: p.cantidad != null ? Number(p.cantidad) : null,
+        })),
         total: Number(row.total ?? 0),
         total_pagado: Number(row.total_pagado ?? 0),
         saldo: Number(row.saldo ?? 0),
       }
     })
   })
+}
+
+// Info de Alegra (cliente, fechas, productos, dinero) indexada por
+// alegra_id — usada por Corte/Fabricación/Soldadura/Pulido/Completadas
+// para cruzar cada ticket con su orden de origen.
+export async function fetchOrdenInfoMap (): Promise<Map<string, FacturaProduccion>> {
+  const facturas = await fetchFacturasProduccion()
+  return new Map(facturas.map(f => [f.alegra_id, f]))
 }
 
 // ─────────────────────────────────────────────────────────
