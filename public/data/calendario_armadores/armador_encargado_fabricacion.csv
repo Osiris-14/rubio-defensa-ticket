@@ -1,22 +1,4 @@
 ﻿id,titulo,inicio,fin,todo_el_dia,calendario,color_id,color_nombre,etiqueta,color_hex,usa_color_predeterminado,color,telefono,nombre,pendiente,cotizacion,p,requerimiento,notas,descripcion,ubicacion
-c1rfd8udnqtfr8a15pqc99hc9f_20260723T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-07-23T07:45:00-04:00,2026-07-23T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
-mesa guillotina limpia
-no tubo ni pedazos medio a medio.
-ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.",
-4mci0naamtkbbp8gin1kv4gl7q_20260723T200000Z,PEDIDO ACERO Y CONSUMIBLES EN ALEGRA,2026-07-23T16:00:00-04:00,2026-07-23T16:30:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
-5filveget4nqn7to7rsh19om4n_20260723T214500Z,Chequeo de calidad de lo que salio hoy por MESA,2026-07-23T17:45:00-04:00,2026-07-23T18:30:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Tecnico----Con papiro de armado. / patas de traseros y estribos bien puestas segun papiro / pisa pies / el ancho / revire / Diseño---no esten tumbadas las curvas.p / patas de porta escaleras.,"Tecnico----Con papiro de armado.
-patas de traseros y estribos bien puestas segun papiro
-pisa pies
-el ancho
-revire
-Diseño---no esten tumbadas las curvas.p
-patas de porta escaleras.",
-4hb8def5jk9c0fppan23o67k63_20260723T220000Z,Revision mensual del puesto 13,2026-07-23T18:00:00-04:00,2026-07-23T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
-4vv692i7bbok26rlp1rjj7a9nj_20260723T230000Z," El Chequeo de calidad  PUESTOS 2,  3, 4,  ,5,  15,  ,8  ,13 ,",2026-07-23T19:00:00-04:00,2026-07-23T19:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
-5nb8mvdcfg6j3d4pffipt18d0h_20260723T234500Z,Limpieza arriba de mesas y al rededor,2026-07-23T19:45:00-04:00,2026-07-23T20:30:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
-3qb3qn8jvrkvdpeffgfvgb826o_20260724T003000Z,Calendarios de avances del dia.,2026-07-23T20:30:00-04:00,2026-07-23T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
-vphofhas3s0f0hmnv6q17bj2vb_20260724T013000Z,Cuales papiros a modificar de fabricaciones.,2026-07-23T21:30:00-04:00,2026-07-23T22:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
-27ecrt0df70icsj7626mictnjt_20260724T021500Z,Modificar papiros en la pc,2026-07-23T22:15:00-04:00,2026-07-23T23:00:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20260724T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-07-24T07:45:00-04:00,2026-07-24T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -278,6 +260,7 @@ patas de porta escaleras.",
 4hb8def5jk9c0fppan23o67k63_20260810T220000Z,Revision mensual del puesto 13,2026-08-10T18:00:00-04:00,2026-08-10T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 4vv692i7bbok26rlp1rjj7a9nj_20260810T230000Z," El Chequeo de calidad  PUESTOS 2,  3, 4,  ,5,  15,  ,8  ,13 ,",2026-08-10T19:00:00-04:00,2026-08-10T19:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 5nb8mvdcfg6j3d4pffipt18d0h_20260810T234500Z,Limpieza arriba de mesas y al rededor,2026-08-10T19:45:00-04:00,2026-08-10T20:30:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20260811T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-08-10T20:30:00-04:00,2026-08-10T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 3qb3qn8jvrkvdpeffgfvgb826o_20260811T003000Z,Calendarios de avances del dia.,2026-08-10T20:30:00-04:00,2026-08-10T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 vphofhas3s0f0hmnv6q17bj2vb_20260811T013000Z,Cuales papiros a modificar de fabricaciones.,2026-08-10T21:30:00-04:00,2026-08-10T22:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 27ecrt0df70icsj7626mictnjt_20260811T021500Z,Modificar papiros en la pc,2026-08-10T22:15:00-04:00,2026-08-10T23:00:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
@@ -385,6 +368,7 @@ patas de porta escaleras.",
 4hb8def5jk9c0fppan23o67k63_20260817T220000Z,Revision mensual del puesto 13,2026-08-17T18:00:00-04:00,2026-08-17T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 4vv692i7bbok26rlp1rjj7a9nj_20260817T230000Z," El Chequeo de calidad  PUESTOS 2,  3, 4,  ,5,  15,  ,8  ,13 ,",2026-08-17T19:00:00-04:00,2026-08-17T19:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 5nb8mvdcfg6j3d4pffipt18d0h_20260817T234500Z,Limpieza arriba de mesas y al rededor,2026-08-17T19:45:00-04:00,2026-08-17T20:30:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20260818T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-08-17T20:30:00-04:00,2026-08-17T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 3qb3qn8jvrkvdpeffgfvgb826o_20260818T003000Z,Calendarios de avances del dia.,2026-08-17T20:30:00-04:00,2026-08-17T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 vphofhas3s0f0hmnv6q17bj2vb_20260818T013000Z,Cuales papiros a modificar de fabricaciones.,2026-08-17T21:30:00-04:00,2026-08-17T22:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 27ecrt0df70icsj7626mictnjt_20260818T021500Z,Modificar papiros en la pc,2026-08-17T22:15:00-04:00,2026-08-17T23:00:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
@@ -480,6 +464,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20260824T220000Z,Revision mensual del puesto 13,2026-08-24T18:00:00-04:00,2026-08-24T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20260824T220000Z,Limpieza arriba de mesas y al rededor,2026-08-24T18:00:00-04:00,2026-08-24T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20260824T233000Z,Cuales papiros a modificar de fabricaciones.,2026-08-24T19:30:00-04:00,2026-08-24T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20260825T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-08-24T20:30:00-04:00,2026-08-24T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20260825T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-08-25T07:45:00-04:00,2026-08-25T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -557,6 +542,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20260831T220000Z,Revision mensual del puesto 13,2026-08-31T18:00:00-04:00,2026-08-31T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20260831T220000Z,Limpieza arriba de mesas y al rededor,2026-08-31T18:00:00-04:00,2026-08-31T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20260831T233000Z,Cuales papiros a modificar de fabricaciones.,2026-08-31T19:30:00-04:00,2026-08-31T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20260901T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-08-31T20:30:00-04:00,2026-08-31T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20260901T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-09-01T07:45:00-04:00,2026-09-01T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -634,6 +620,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20260907T220000Z,Revision mensual del puesto 13,2026-09-07T18:00:00-04:00,2026-09-07T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20260907T220000Z,Limpieza arriba de mesas y al rededor,2026-09-07T18:00:00-04:00,2026-09-07T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20260907T233000Z,Cuales papiros a modificar de fabricaciones.,2026-09-07T19:30:00-04:00,2026-09-07T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20260908T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-09-07T20:30:00-04:00,2026-09-07T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20260908T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-09-08T07:45:00-04:00,2026-09-08T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -715,6 +702,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20260914T220000Z,Revision mensual del puesto 13,2026-09-14T18:00:00-04:00,2026-09-14T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20260914T220000Z,Limpieza arriba de mesas y al rededor,2026-09-14T18:00:00-04:00,2026-09-14T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20260914T233000Z,Cuales papiros a modificar de fabricaciones.,2026-09-14T19:30:00-04:00,2026-09-14T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20260915T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-09-14T20:30:00-04:00,2026-09-14T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20260915T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-09-15T07:45:00-04:00,2026-09-15T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -792,6 +780,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20260921T220000Z,Revision mensual del puesto 13,2026-09-21T18:00:00-04:00,2026-09-21T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20260921T220000Z,Limpieza arriba de mesas y al rededor,2026-09-21T18:00:00-04:00,2026-09-21T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20260921T233000Z,Cuales papiros a modificar de fabricaciones.,2026-09-21T19:30:00-04:00,2026-09-21T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20260922T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-09-21T20:30:00-04:00,2026-09-21T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20260922T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-09-22T07:45:00-04:00,2026-09-22T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -869,6 +858,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20260928T220000Z,Revision mensual del puesto 13,2026-09-28T18:00:00-04:00,2026-09-28T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20260928T220000Z,Limpieza arriba de mesas y al rededor,2026-09-28T18:00:00-04:00,2026-09-28T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20260928T233000Z,Cuales papiros a modificar de fabricaciones.,2026-09-28T19:30:00-04:00,2026-09-28T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20260929T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-09-28T20:30:00-04:00,2026-09-28T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20260929T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-09-29T07:45:00-04:00,2026-09-29T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -946,6 +936,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20261005T220000Z,Revision mensual del puesto 13,2026-10-05T18:00:00-04:00,2026-10-05T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20261005T220000Z,Limpieza arriba de mesas y al rededor,2026-10-05T18:00:00-04:00,2026-10-05T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20261005T233000Z,Cuales papiros a modificar de fabricaciones.,2026-10-05T19:30:00-04:00,2026-10-05T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20261006T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-10-05T20:30:00-04:00,2026-10-05T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20261006T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-10-06T07:45:00-04:00,2026-10-06T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -1027,6 +1018,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20261012T220000Z,Revision mensual del puesto 13,2026-10-12T18:00:00-04:00,2026-10-12T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20261012T220000Z,Limpieza arriba de mesas y al rededor,2026-10-12T18:00:00-04:00,2026-10-12T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20261012T233000Z,Cuales papiros a modificar de fabricaciones.,2026-10-12T19:30:00-04:00,2026-10-12T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20261013T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-10-12T20:30:00-04:00,2026-10-12T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20261013T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-10-13T07:45:00-04:00,2026-10-13T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -1104,6 +1096,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20261019T220000Z,Revision mensual del puesto 13,2026-10-19T18:00:00-04:00,2026-10-19T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20261019T220000Z,Limpieza arriba de mesas y al rededor,2026-10-19T18:00:00-04:00,2026-10-19T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20261019T233000Z,Cuales papiros a modificar de fabricaciones.,2026-10-19T19:30:00-04:00,2026-10-19T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20261020T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-10-19T20:30:00-04:00,2026-10-19T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20261020T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-10-20T07:45:00-04:00,2026-10-20T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -1181,6 +1174,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20261026T220000Z,Revision mensual del puesto 13,2026-10-26T18:00:00-04:00,2026-10-26T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20261026T220000Z,Limpieza arriba de mesas y al rededor,2026-10-26T18:00:00-04:00,2026-10-26T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20261026T233000Z,Cuales papiros a modificar de fabricaciones.,2026-10-26T19:30:00-04:00,2026-10-26T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20261027T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-10-26T20:30:00-04:00,2026-10-26T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20261027T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-10-27T07:45:00-04:00,2026-10-27T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -1258,6 +1252,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20261102T220000Z,Revision mensual del puesto 13,2026-11-02T18:00:00-04:00,2026-11-02T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20261102T220000Z,Limpieza arriba de mesas y al rededor,2026-11-02T18:00:00-04:00,2026-11-02T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20261102T233000Z,Cuales papiros a modificar de fabricaciones.,2026-11-02T19:30:00-04:00,2026-11-02T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20261103T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-11-02T20:30:00-04:00,2026-11-02T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20261103T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-11-03T07:45:00-04:00,2026-11-03T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -1339,6 +1334,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20261109T220000Z,Revision mensual del puesto 13,2026-11-09T18:00:00-04:00,2026-11-09T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20261109T220000Z,Limpieza arriba de mesas y al rededor,2026-11-09T18:00:00-04:00,2026-11-09T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20261109T233000Z,Cuales papiros a modificar de fabricaciones.,2026-11-09T19:30:00-04:00,2026-11-09T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20261110T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-11-09T20:30:00-04:00,2026-11-09T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20261110T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-11-10T07:45:00-04:00,2026-11-10T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -1416,6 +1412,7 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4hb8def5jk9c0fppan23o67k63_20261116T220000Z,Revision mensual del puesto 13,2026-11-16T18:00:00-04:00,2026-11-16T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,llenar estos datos para puesto de doblador de ordenes todos los meses,llenar estos datos para puesto de doblador de ordenes todos los meses,
 etp3uo9fjk2o5lhk17pvn1fvd6_20261116T220000Z,Limpieza arriba de mesas y al rededor,2026-11-16T18:00:00-04:00,2026-11-16T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20261116T233000Z,Cuales papiros a modificar de fabricaciones.,2026-11-16T19:30:00-04:00,2026-11-16T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+3mvs375esv8bir3cqblaa2cu19_20261117T003000Z,"Subir ordenes con mas de 15 dias,desde su instalacion  al techo",2026-11-16T20:30:00-04:00,2026-11-16T21:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 c1rfd8udnqtfr8a15pqc99hc9f_20261117T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-11-17T07:45:00-04:00,2026-11-17T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
 mesa guillotina limpia
 no tubo ni pedazos medio a medio.
@@ -1472,3 +1469,8 @@ TA-1 HIJET TA-2 TOW ACE TA-3 KIA TA-4 NV200 TA-5 COASTER TA-6 APV",
 4sp00djjvse3bhas7drd6fu9n3_20261120T204500Z,-ANALIZAR TRASERO IMPRIMIR Y ESTRIBOS EL DISEñO Y LAS PIEZAS ,2026-11-20T16:45:00-04:00,2026-11-20T17:30:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 etp3uo9fjk2o5lhk17pvn1fvd6_20261120T220000Z,Limpieza arriba de mesas y al rededor,2026-11-20T18:00:00-04:00,2026-11-20T18:45:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
 nun6emhv6qivrqc34r68gojcgv_20261120T233000Z,Cuales papiros a modificar de fabricaciones.,2026-11-20T19:30:00-04:00,2026-11-20T20:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
+c1rfd8udnqtfr8a15pqc99hc9f_20261121T114500Z,PEDAZOS DE TUBOS  Y ORDENES EN EL PISO,2026-11-21T07:45:00-04:00,2026-11-21T08:15:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero. / mesa guillotina limpia / no tubo ni pedazos medio a medio. / ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.,"Revisar no se esten quedando tubos y pedazos debajo.Que no se lleven tubos que son de separadores para el basudero.
+mesa guillotina limpia
+no tubo ni pedazos medio a medio.
+ORDENES EN EL MEDIO DEL CAMINO QUE DIFICULTA EL CAMINAR.",
+5e6i1ue015v2kmvuqipkir875h_20261121T173000Z,"TENER CALENDARIOS REVISAR MEDIDAS, DE ORDENES",2026-11-21T13:30:00-04:00,2026-11-21T15:00:00-04:00,No,ENCARGADO DE FABRICACION,24,Otro,NONE,#a47ae2,Si,,,,,,,,,,
